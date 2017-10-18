@@ -1,0 +1,6 @@
+Required Responses
+------------------
+propagated_ban_message - <original mod>, <original description>, <original subreddit>
+propagated_ban_note - <original mod>, <original description>, <original subreddit>
+propagated_ban_modmail_title - <original mod>, <original description>, <original subreddit>, <original timestamp>, <original id>, <banned user>
+propagated_ban_modmail_body - <original mod>, <original description>, <original subreddit>, <original timestamp>, <original id>, <banned user>
