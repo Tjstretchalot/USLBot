@@ -32,6 +32,7 @@ import me.timothy.jreddit.info.Thing;
  */
 public class USLBotDriver extends BotDriver {
 	protected List<MonitoredSubreddit> monitoredSubreddits;
+	protected USLDatabaseBackupManager backupManager;
 	
 	/**
 	 * Creates a new bot driver that has the specified context to
@@ -44,9 +45,10 @@ public class USLBotDriver extends BotDriver {
 	 * @param pmSummons the list of pm summons
 	 * @param submissionSummons the list of submission summons
 	 */
-	public USLBotDriver(Database database, FileConfiguration config, Bot bot, CommentSummon[] commentSummons,
+	public USLBotDriver(USLDatabase database, USLFileConfiguration config, Bot bot, CommentSummon[] commentSummons,
 			PMSummon[] pmSummons, LinkSummon[] submissionSummons) {
 		super(database, config, bot, commentSummons, pmSummons, submissionSummons);
+		backupManager = new USLDatabaseBackupManager(database, config);
 	}
 
 	@Override
@@ -59,6 +61,9 @@ public class USLBotDriver extends BotDriver {
 		
 		logger.trace("Scanning for new ban reports..");
 		scanForBans();
+		
+		logger.trace("Considering backing up database..");
+		considerBackupDatabase();
 		
 		logger.trace("Sleeping for a while..");
 		sleepFor(30000);
@@ -177,7 +182,6 @@ public class USLBotDriver extends BotDriver {
 				continue;
 			if(otherSub.readOnly)
 				continue;
-			
 			logger.printf(Level.TRACE, "Checking if %s is already banned on %s..", ban.targetAuthor(), sub.subreddit);
 			if(checkIfBanned(otherSub, ban.targetAuthor())) {
 				logger.printf(Level.INFO, "Not banning %s from %s - already banned!", ban.targetAuthor(), otherSub.subreddit);
@@ -312,6 +316,13 @@ public class USLBotDriver extends BotDriver {
 				return RedditUtils.getModeratorLog(sub.subreddit, null, "banuser", after, bot.getUser());
 			}
 		}.run();
+	}
+	
+	/**
+	 * Consider backing up the database. Delegates to USLDatabaseBackup
+	 */
+	protected void considerBackupDatabase() {
+		backupManager.considerBackup();
 	}
 	
 	/**

@@ -33,7 +33,6 @@ public class MysqlBanHistoryMapping extends MysqlObjectMapping<BanHistory> imple
 				new MysqlColumn(Types.TIMESTAMP, "occurred_at"),
 				new MysqlColumn(Types.TIMESTAMP, "updated_at")
 		});
-		// TODO Auto-generated constructor stub
 	}
 
 	@Override

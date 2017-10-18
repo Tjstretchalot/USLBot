@@ -18,6 +18,7 @@ The first stage to assisting with the development of the USLBot is getting a loc
 - mysql-connector-5.1.19 
 - json-simple-1.1.1
 - JUnit 4
+- JSch
 
 It is suggested that you clone jReddit and Summonable-Bot into the same workspace that you work on the USLBot for and add them as project dependencies, so it's easier to pull the latest changes. Typically you do not need to add JUnit 4 at this step, since Eclipse will prompt you to add it to the workspace when you try to run a test.
 
@@ -28,6 +29,7 @@ In order to run the tests, you must have some basic configuration prepared. Crea
     tests/
       database.properties
       user.properties
+      ftpbackups.properties
       
 Under user.properties you can use the following:
 
@@ -40,11 +42,24 @@ It is not important what information you put in this file, unless the test you a
     
 Under database.properties it will have the following format:
 
-    username=usl
+    username=my-username
     password=my-secure-password
     url=jdbc:mysql://localhost/databasename
 
 You must run a local mysql instance and create a database that includes the string literal "test". You then need to create an account which has access to that database and put all that information in the database.properties.
+
+Under ftpbackups.properties it will have the following format:
+
+    username=my-username
+    password=my-secure-password
+    host=my-ftp-host
+    port=22
+    knownhostsfile=knownhosts.txt
+    dbfolder=dbbackups
+    intervalms=86400000
+    
+
+If you want to run backup-related tests, this information needs to correspond to the sftp backup server that will be used for testing. The known hosts file must be valid for connecting to the specified ftp database with strict host key checking.
 
 At that point, simply run any tests to verify that everything is configured correctly. For example, run me.timothy.tests.database.mysql.MysqlDatabaseTests.
 
