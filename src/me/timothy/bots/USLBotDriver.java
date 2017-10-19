@@ -3,8 +3,10 @@ package me.timothy.bots;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.Level;
 import org.json.simple.parser.ParseException;
@@ -12,6 +14,7 @@ import org.json.simple.parser.ParseException;
 import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
+import me.timothy.bots.models.SubscribedHashtag;
 import me.timothy.bots.responses.ResponseFormatter;
 import me.timothy.bots.responses.ResponseInfo;
 import me.timothy.bots.responses.ResponseInfoFactory;
@@ -157,19 +160,12 @@ public class USLBotDriver extends BotDriver {
 			return;
 		}
 		
-		if(!ban.description().toLowerCase().contains("#scammer")) {
-			logger.trace("(description='" + ban.description() + "') does not contain #scammer, saving and moving on");
-			BanHistory banHistory = new BanHistory(-1, sub.id, modPerson.id, bannedPerson.id, BanHistory.BanReasonIdentifier.SubBanNotScammer.id,
-					ban.description(), ban.id(), false, new Timestamp(now), new Timestamp((long)(ban.createdUTC() * 1000)), new Timestamp(now));
-			db.getBanHistoryMapping().save(banHistory);
-			return;
-		}
 		
-		logger.info("This is a permanent ban containing #scammer in " + sub);
 		logger.trace("Saving ban history..");
-		BanHistory banHistory = new BanHistory(-1, sub.id, modPerson.id, bannedPerson.id, BanHistory.BanReasonIdentifier.SubBanScammer.id, 
+		BanHistory banHistory = new BanHistory(-1, sub.id, modPerson.id, bannedPerson.id, BanHistory.BanReasonIdentifier.SubBan.id, 
 				ban.description(), ban.id(), false, new Timestamp(now), new Timestamp((long)(ban.createdUTC() * 1000)), new Timestamp(now));
 		db.getBanHistoryMapping().save(banHistory);
+		
 		if(sub.writeOnly) {
 			logger.trace("Subreddit is write-only. Flagging as suppressed and returning..");
 			banHistory.suppressed = true;
@@ -182,6 +178,16 @@ public class USLBotDriver extends BotDriver {
 				continue;
 			if(otherSub.readOnly)
 				continue;
+			logger.printf(Level.TRACE, "Checking if %s is tracking any relevant hashtags..", otherSub.subreddit);
+			List<SubscribedHashtag> relevantTags = getRelevantSubscribedHashtags(otherSub, ban.description());
+			if(relevantTags.size() <= 0) {
+				logger.printf(Level.INFO, "%s does not subscribe to anything in %s", otherSub.subreddit, ban.description());
+				continue;
+			}
+			
+			String tagsStringified = String.join(", ", relevantTags.stream().map(tag -> '"' + tag.hashtag + '"').collect(Collectors.toList()));
+			logger.printf(Level.INFO, "The following relevant tags triggered on %s: %s", ban.description(), tagsStringified);
+			
 			logger.printf(Level.TRACE, "Checking if %s is already banned on %s..", ban.targetAuthor(), sub.subreddit);
 			if(checkIfBanned(otherSub, ban.targetAuthor())) {
 				logger.printf(Level.INFO, "Not banning %s from %s - already banned!", ban.targetAuthor(), otherSub.subreddit);
@@ -189,16 +195,36 @@ public class USLBotDriver extends BotDriver {
 			}
 			
 			logger.printf(Level.INFO, "Banning %s from %s as propagating from %s banning him on %s with action %s..", ban.targetAuthor(), otherSub.subreddit, ban.mod(), sub.subreddit, ban.id());
-			formatMessagesAndBanUserDueToBan(otherSub, ban, sub);
+			formatMessagesAndBanUserDueToBan(otherSub, ban, sub, tagsStringified);
 			
 			if(!otherSub.silent) {
 				logger.printf(Level.TRACE, "Sending mail to /r/%s about banning %s", otherSub.subreddit, ban.targetAuthor());
 				
-				formatMessagesAndSendModmail(otherSub, ban, sub);
+				formatMessagesAndSendModmail(otherSub, ban, sub, tagsStringified);
 			}
 		}
 	}
 	
+	/**
+	 * Determines if sub is subscribed to anything contains in banDesc.
+	 * 
+	 * @param sub the subreddit
+	 * @param banDesc the ban description
+	 * @return if sub subscribes to something in banDesc
+	 */
+	protected List<SubscribedHashtag> getRelevantSubscribedHashtags(MonitoredSubreddit sub, String banDesc) {
+		final String banDescLower = banDesc.toLowerCase();
+		final USLDatabase db = (USLDatabase) database;
+		
+		List<SubscribedHashtag> hashtags = db.getSubscribedHashtagMapping().fetchForSubreddit(sub.id, false);
+		List<SubscribedHashtag> result = new ArrayList<>();
+		for(SubscribedHashtag hashtag : hashtags) {
+			if(banDescLower.contains(hashtag.hashtag.toLowerCase())) {
+				result.add(hashtag);
+			}
+		}
+		return result;
+	}
 	/**
 	 * Bans the target of the modaction on the subToBanOn. Formats both the message, reason, and note
 	 * appropriately.
@@ -206,13 +232,15 @@ public class USLBotDriver extends BotDriver {
 	 * @param subToBanOn the sub to ban ban.targetAuthor() on
 	 * @param ban the original ban
 	 * @param subWhichBanned the MonitoredSubreddit for ban.subreddit()
+	 * @param tagsStringified 
 	 */
-	protected void formatMessagesAndBanUserDueToBan(MonitoredSubreddit subToBanOn, ModAction ban, MonitoredSubreddit subWhichBanned) {
+	protected void formatMessagesAndBanUserDueToBan(MonitoredSubreddit subToBanOn, ModAction ban, MonitoredSubreddit subWhichBanned, String tagsStringified) {
 		USLDatabase db = (USLDatabase) database;
 		ResponseInfo banMessageRespInfo = new ResponseInfo(ResponseInfoFactory.base);
 		banMessageRespInfo.addTemporaryString("original mod", ban.mod());
 		banMessageRespInfo.addTemporaryString("original description", ban.description());
 		banMessageRespInfo.addTemporaryString("original subreddit", ban.subreddit());
+		banMessageRespInfo.addTemporaryString("triggering tags", tagsStringified);
 		banMessageRespInfo.addTemporaryString("new subreddit", subToBanOn.subreddit);
 		ResponseFormatter banMessageFormatter = new ResponseFormatter(db.getResponseMapping().fetchByName("propagated_ban_message").responseBody, banMessageRespInfo);
 		String banMessage = banMessageFormatter.getFormattedResponse(config, database);
@@ -229,7 +257,7 @@ public class USLBotDriver extends BotDriver {
 	 * @param ban the original ban
 	 * @param subWhichBanned the MonitoredSubreddit version of ban.subreddit()
 	 */
-	protected void formatMessagesAndSendModmail(MonitoredSubreddit subToMail, ModAction ban, MonitoredSubreddit subWhichBanned) {
+	protected void formatMessagesAndSendModmail(MonitoredSubreddit subToMail, ModAction ban, MonitoredSubreddit subWhichBanned, String tagsStringified) {
 		USLDatabase db = (USLDatabase) database;
 		ResponseInfo messageRespInfo = new ResponseInfo(ResponseInfoFactory.base);
 		messageRespInfo.addTemporaryString("original mod", ban.mod());
@@ -238,6 +266,7 @@ public class USLBotDriver extends BotDriver {
 		messageRespInfo.addTemporaryString("original timestamp", timeToPretty(ban.createdUTC()));
 		messageRespInfo.addTemporaryString("original id", ban.id());
 		messageRespInfo.addTemporaryString("banned user", ban.targetAuthor());
+		messageRespInfo.addTemporaryString("triggering tags", tagsStringified);
 		ResponseFormatter modMailTitleFormatter = new ResponseFormatter(db.getResponseMapping().fetchByName("propagated_ban_modmail_title").responseBody, messageRespInfo);
 		String modMailTitle = modMailTitleFormatter.getFormattedResponse(config, database);
 		ResponseFormatter modMailBodyFormatter = new ResponseFormatter(db.getResponseMapping().fetchByName("propagated_ban_modmail_body").responseBody, messageRespInfo);

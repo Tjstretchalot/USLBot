@@ -12,4 +12,5 @@ public interface MappingDatabase {
 	public PersonMapping getPersonMapping();
 	public BanHistoryMapping getBanHistoryMapping();
 	public ResponseMapping getResponseMapping();
+	public SubscribedHashtagMapping getSubscribedHashtagMapping();
 }

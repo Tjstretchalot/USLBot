@@ -49,7 +49,7 @@ public class BanHistoryMappingTest {
 		database.getMonitoredSubredditMapping().save(johnssub);
 		
 		long now = System.currentTimeMillis();
-		BanHistory banHist = new BanHistory(-1, johnssub.id, john.id, paul.id, BanHistory.BanReasonIdentifier.SubBanNotScammer.id, 
+		BanHistory banHist = new BanHistory(-1, johnssub.id, john.id, paul.id, BanHistory.BanReasonIdentifier.SubBan.id, 
 				"i hate u", "i think its cause john doesnt like paul", false, new Timestamp(now), new Timestamp(now), new Timestamp(now));
 		database.getBanHistoryMapping().save(banHist);
 		assertTrue(banHist.id > 0);

@@ -10,7 +10,8 @@ import org.junit.runners.Suite.SuiteClasses;
 			MysqlFullnameMappingTest.class,
 			MysqlMonitoredSubredditMappingTest.class,
 			MysqlPersonMappingTest.class,
-			MysqlBanHistoryMappingTest.class
+			MysqlBanHistoryMappingTest.class,
+			MysqlSubscribedHashtagMappingTest.class
 		})
 public class MysqlDatabaseTests {
 

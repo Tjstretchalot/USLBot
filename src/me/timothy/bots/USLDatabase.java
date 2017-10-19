@@ -13,11 +13,13 @@ import me.timothy.bots.database.MonitoredSubredditMapping;
 import me.timothy.bots.database.PersonMapping;
 import me.timothy.bots.database.ResponseMapping;
 import me.timothy.bots.database.SchemaValidator;
+import me.timothy.bots.database.SubscribedHashtagMapping;
 import me.timothy.bots.database.mysql.MysqlBanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlFullnameMapping;
 import me.timothy.bots.database.mysql.MysqlMonitoredSubredditMapping;
 import me.timothy.bots.database.mysql.MysqlPersonMapping;
 import me.timothy.bots.database.mysql.MysqlResponseMapping;
+import me.timothy.bots.database.mysql.MysqlSubscribedHashtagMapping;
 import me.timothy.bots.models.Fullname;
 
 /**
@@ -35,12 +37,14 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private PersonMapping personMapping;
 	private BanHistoryMapping banHistoryMapping;
 	private ResponseMapping responseMapping;
+	private SubscribedHashtagMapping subscribedHashtagMapping;
 	
 	private SchemaValidator fullnameValidator;
 	private SchemaValidator monitoredSubredditValidator;
 	private SchemaValidator personValidator;
 	private SchemaValidator banHistoryValidator;
 	private SchemaValidator responseValidator;
+	private SchemaValidator subscribedHashtagValidator;
 	
 	/**
 	 * Connects to the specified database. If there is an active connection
@@ -68,12 +72,14 @@ public class USLDatabase extends Database implements MappingDatabase {
 		personMapping = new MysqlPersonMapping(this, connection);
 		banHistoryMapping = new MysqlBanHistoryMapping(this, connection);
 		responseMapping = new MysqlResponseMapping(this, connection);
+		subscribedHashtagMapping = new MysqlSubscribedHashtagMapping(this, connection);
 		
 		fullnameValidator = (SchemaValidator) fullnameMapping;
 		monitoredSubredditValidator = (SchemaValidator) monitoredSubredditMapping;
 		personValidator = (SchemaValidator) personMapping;
 		banHistoryValidator = (SchemaValidator) banHistoryMapping;
 		responseValidator = (SchemaValidator) responseMapping;
+		subscribedHashtagValidator = (SchemaValidator) subscribedHashtagMapping;
 	}
 
 	/**
@@ -92,12 +98,14 @@ public class USLDatabase extends Database implements MappingDatabase {
 		personMapping = null;
 		banHistoryMapping = null;
 		responseMapping = null;
+		subscribedHashtagMapping = null;
 		
 		fullnameValidator = null;
 		monitoredSubredditValidator = null;
 		personValidator = null;
 		banHistoryValidator = null;
 		responseValidator = null;
+		subscribedHashtagValidator = null;
 	}
 
 
@@ -108,6 +116,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	 */
 	public void purgeAll() {
 		/* REVERSE ORDER of validateTableState */
+		subscribedHashtagValidator.purgeSchema();
 		responseValidator.purgeSchema();
 		banHistoryValidator.purgeSchema();
 		personValidator.purgeSchema();
@@ -129,6 +138,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		personValidator.validateSchema();
 		banHistoryValidator.validateSchema();
 		responseValidator.validateSchema();
+		subscribedHashtagValidator.validateSchema();
 	}
 	
 	@Override
@@ -154,6 +164,11 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public ResponseMapping getResponseMapping() {
 		return responseMapping;
+	}
+	
+	@Override
+	public SubscribedHashtagMapping getSubscribedHashtagMapping() {
+		return subscribedHashtagMapping;
 	}
 	
 	/**

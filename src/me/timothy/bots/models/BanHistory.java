@@ -25,14 +25,9 @@ public class BanHistory {
 		Propagate(0),
 		
 		/**
-		 * The subreddit banned the user, and used the scammer tag
+		 * The subreddit banned the user
 		 */
-		SubBanScammer(1),
-		
-		/**
-		 * The subreddit banned the user, but did not use the scammer tag
-		 */
-		SubBanNotScammer(2)
+		SubBan(1),
 		;
 		
 		/**

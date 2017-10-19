@@ -99,7 +99,7 @@ public class MysqlTestUtils {
 	
 	/**
 	 * Convenience function to verify that a list matches the 
-	 * set of objects.
+	 * set of objects. Does not verify order.
 	 * 
 	 * @param list the list
 	 * @param objs the objects
