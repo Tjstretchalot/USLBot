@@ -178,7 +178,7 @@ public class MysqlPersonMapping extends MysqlObjectMapping<Person> implements Sc
 				+ "password_hash TEXT, "
 				+ "email TEXT, "
 				+ "auth INT NOT NULL, "
-				+ "created_at TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00', "
+				+ "created_at TIMESTAMP NOT NULL DEFAULT '1970-01-01 00:00:01', "
 				+ "updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, "
 				+ "PRIMARY KEY(id), "
 				+ "UNIQUE KEY(username))");

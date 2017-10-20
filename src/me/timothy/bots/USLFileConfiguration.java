@@ -39,7 +39,7 @@ public class USLFileConfiguration extends FileConfiguration {
 		super.load();
 
 		addProperties("database", true, "url", "username", "password", "database");
-		addProperties("ftpbackups", true, "host", "username", "password", "knownhostsfile", "port", "dbfolder");
+		addProperties("ftpbackups", true, "host", "username", "password", "knownhostsfile", "port", "dbfolder", "secure");
 	}
 	
 }

@@ -7,8 +7,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Vector;
 
+import org.apache.commons.net.ftp.FTP;
+import org.apache.commons.net.ftp.FTPClient;
+import org.apache.commons.net.ftp.FTPReply;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -128,10 +134,17 @@ public class USLDatabaseBackupManager {
 		commandBuilder.append("gzip > \"").append(file.getAbsolutePath()).append("\"");
 		
 		String command = commandBuilder.toString();
-		logger.trace("Executing " + command);
+		String commandClean = command.replace("-p" + config.getProperty("database.password"), "-pREDACTED");
+		logger.trace("Executing " + commandClean);
+		
 		Runtime runtime = Runtime.getRuntime();
 		try {
-			Process pc = runtime.exec(command);
+			Process pc = null;
+			if(windows) {
+				pc = runtime.exec(command);
+			}else {
+				pc = runtime.exec(new String[] { "/bin/sh", "-c", command });
+			}
 			
 			InputStream stdInp = pc.getInputStream();
 			if(stdInp != null) {
@@ -169,9 +182,9 @@ public class USLDatabaseBackupManager {
 			Thread.sleep(1000);
 			logger.trace("Verifying backup file exists...");
 			if(!file.exists()) {
-				logger.error("Backup file did not exist after executing command " + command);
+				logger.error("Backup file did not exist after executing command " + commandClean);
 				logger.error("Result code was " + result);
-				throw new RuntimeException("Expected backup file to exist after executing " + command);
+				throw new RuntimeException("Expected backup file to exist after executing " + commandClean);
 			}
 		} catch (IOException | InterruptedException e) {
 			logger.throwing(e);
@@ -180,12 +193,180 @@ public class USLDatabaseBackupManager {
 	}
 	
 	/**
+	 * Send the backup file to the server described by the configuration file.
+	 * 
+	 * @param backupFile the backup file to send
+	 * @param now the current timestamp
+	 */
+	protected void sendDatabaseBackupFile(File backupFile, long now) {
+		final boolean secure = Boolean.valueOf(config.getProperty("ftpbackups.secure"));
+		
+		if(secure) {
+			sendDatabaseBackupFileSFTP(backupFile, now);
+		}else {
+			sendDatabaseBackupFileFTP(backupFile, now);
+		}
+	}
+	
+	/**
 	 * Send the database backup file to the FTP server.
+	 * 
+	 * @param backupFile the backup file
+	 * @param now the current timestamp
+	 */
+	protected void sendDatabaseBackupFileFTP(File backupFile, long now) {
+		final String ftpHost = config.getProperty("ftpbackups.host");
+		final String ftpUser = config.getProperty("ftpbackups.username");
+		final String ftpPass = config.getProperty("ftpbackups.password");
+		final int ftpPort = Integer.parseInt(config.getProperty("ftpbackups.port"));
+		final String dbFolder = config.getProperty("ftpbackups.dbfolder");
+		
+		List<String> dbFolderPath = getDBFolderPath(dbFolder);
+		
+		FTPClient client = new FTPClient();
+		try { 
+			logger.printf(Level.TRACE, "Connecting to FTP server %s on port %s..", ftpHost, ftpPort);
+			client.connect(ftpHost, ftpPort);
+			
+			int reply = client.getReplyCode();
+			if(!FTPReply.isPositiveCompletion(reply)) {
+				logger.printf(Level.ERROR, "FTP Server returned unexpected reply code %d. Aborting!", reply);
+				throw new RuntimeException("Unexpected FTP reply code " + reply);
+			}
+			
+			logger.printf(Level.TRACE, "Successfully connected. Logging in..");
+			boolean loginSuccess = client.login(ftpUser, ftpPass);
+			
+			if(!loginSuccess) {
+				logger.error("FTP Server rejected login information! Aborting!");
+				throw new RuntimeException("FTP server rejected login information");
+			}
+			
+			client.setFileType(FTP.BINARY_FILE_TYPE);
+			
+			logger.printf(Level.TRACE, "Navigating to database folder %s", dbFolder);
+			String currentDir = navigateToRelativeFTPFolder(client, dbFolderPath, "", dbFolder);
+			
+			logger.printf(Level.TRACE, "Generating unused file name");
+			String[] localNames = client.listNames();
+
+			int counter = 2;
+			String remoteName = "usl-db-backup-" + now + ".sql.gz";
+			
+			while(true) {
+				boolean found = false;
+				for(String fileName : localNames) {
+					if(fileName.equals(remoteName)) {
+						found = true;
+						break;
+					}
+				}
+				
+				if(!found)
+					break;
+				
+				remoteName = "usl-db-backup-" + now + " (" + counter + ").sql.gz";
+				counter++;
+			}
+			
+			logger.printf(Level.TRACE, "Selected file name %s", remoteName);
+			logger.printf(Level.TRACE, "Beginning file upload to %s/%s ...", currentDir, remoteName);
+			
+			boolean storeSuccess = false;
+			try (InputStream input = new FileInputStream(backupFile)) {
+				storeSuccess = client.storeFile(remoteName, input);
+			}
+			
+			if(storeSuccess) {
+				logger.info("Database backup successful");
+			}else {
+				logger.error("client.storeFile returned false!");
+				throw new RuntimeException("client.storeFile returned false!");
+			}
+		}catch(IOException e) {
+			logger.throwing(e);
+			throw new RuntimeException(e);
+		}finally {
+			try {
+				logger.trace("Attempting to disconnect from ftp server..");
+				client.disconnect();
+			} catch (IOException e) {
+				logger.trace("Failed to disconnect from ftp server");
+				logger.throwing(e);
+				throw new RuntimeException(e);
+			}
+		}
+	}
+	
+	/**
+	 * Gets the path to the database folder such that the first element
+	 * is the highest-level folder and the last element is the lowest-level
+	 * folder.
+	 * 
+	 * For example
+	 * 
+	 * getDBFolder("one/two/three\\four/") - [ "one", "two", "three", "four" ]
+	 * @param dbFolder
+	 * @return
+	 */
+	protected static List<String> getDBFolderPath(String dbFolder) {
+		return Arrays.asList(dbFolder.split("/|\\\\"));
+	}
+	
+	/**
+	 * Navigates to dbFolder. If you split the database folder on common file delimeters you get
+	 * dbFolderPath.
+	 * 
+	 * @param client the ftp client
+	 * @param dbFolderPath dbFolder split on file delimiters
+	 * @param currentDir the current working directory
+	 * @param dbFolder full path to folder
+	 * @throws IOException if one occurs
+	 * @return the new working directory
+	 */
+	protected String navigateToRelativeFTPFolder(FTPClient client, List<String> dbFolderPath, String currentDir, String dbFolder) throws IOException {
+		for(String folder : dbFolderPath) {
+			if(client.changeWorkingDirectory(folder)) {
+				if(currentDir.isEmpty()) {
+					currentDir += folder;
+				}else {
+					currentDir += "/" + folder;
+				}
+				logger.printf(Level.TRACE, "Succesfully navigated to %s, current working directory is now %s", folder, currentDir);
+			}else {
+				logger.printf(Level.WARN, "Failed to navigate to %s, attempting to generate directory..", folder);
+				if(client.makeDirectory(folder)) {
+					logger.printf(Level.INFO, "Successfully generated folder %s (current dir is %s)", folder, currentDir);
+				}else {
+					logger.printf(Level.ERROR, "Failed to generate folder %s (current dir is %s), aborting!", folder, currentDir);
+					throw new RuntimeException("Failed to make directories to path " + dbFolder);
+				}
+				
+				logger.printf(Level.TRACE, "Navigating to newly generated folder..");
+				if(client.changeWorkingDirectory(folder)) {
+					if(currentDir.isEmpty()) {
+						currentDir += folder;
+					}else {
+						currentDir += "/" + folder;
+					}
+					logger.printf(Level.TRACE, "Successfully navigated to newly generated folder, current working directory is now %s", currentDir);
+				}else {
+					logger.printf(Level.ERROR, "After successfully generating %s I failed to navigate to it. working directory: %s. Aborting!", folder, currentDir);
+					throw new RuntimeException("Failed to navigate to " + folder + " at working directory " + currentDir);
+				}
+			}
+		}
+		
+		return currentDir;
+	}
+	
+	/**
+	 * Send the database backup file to the SFTP server.
 	 * 
 	 * @param backupFile the file to send.
 	 * @param now the current timestamp
 	 */
-	protected void sendDatabaseBackupFile(File backupFile, long now) {
+	protected void sendDatabaseBackupFileSFTP(File backupFile, long now) {
 		final String sftpHost = config.getProperty("ftpbackups.host");
 		final String sftpUser = config.getProperty("ftpbackups.username");
 		final String sftpPass = config.getProperty("ftpbackups.password");
