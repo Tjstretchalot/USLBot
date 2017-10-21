@@ -14,7 +14,7 @@ The first stage to assisting with the development of the USLBot is getting a loc
 
 - Latest [jReddit](https://github.com/tjstretchalot/jreddit)
 - Latest [Summonable-Bot](https://github.com/tjstretchalot/summonable-bot)
-- log4j-2.0 (api and core)
+- log4j-2.9.1 (api and core)
 - mysql-connector-5.1.19 
 - json-simple-1.1.1
 - JUnit 4
@@ -57,6 +57,7 @@ Under ftpbackups.properties it will have the following format:
     port=22
     knownhostsfile=knownhosts.txt
     dbfolder=dbbackups
+    logsfolder=logs
     intervalms=86400000
     secure=false
     

@@ -19,11 +19,15 @@ import me.timothy.jreddit.requests.Utils;
  * @author Timothy Moore
  */
 public class USLBotMain {
+	/**
+	 * This is solely here so that the custom apache log4j hooks can access
+	 * my file configuration rather than having to duplicate that information
+	 * via the log4j2.xml file
+	 */
+	public static USLFileConfiguration mainConfig;
+	
 	public static void main(String[] args) {
 		Logger logger = LogManager.getLogger();
-		
-		logger.debug("Loading file configuration...");
-
 		USLFileConfiguration config = new USLFileConfiguration();
 		try {
 			config.load();
@@ -31,6 +35,10 @@ public class USLBotMain {
 			e.printStackTrace();
 			return;
 		}
+		
+		mainConfig = config;
+		
+		logger.debug("File configuration loaded.");
 		
 		Utils.USER_AGENT = config.getProperty("user.appClientID") + ":v10.11.2017 (by /u/Tjstretchalot)";
 		
