@@ -13,4 +13,5 @@ public interface MappingDatabase {
 	public BanHistoryMapping getBanHistoryMapping();
 	public ResponseMapping getResponseMapping();
 	public SubscribedHashtagMapping getSubscribedHashtagMapping();
+	public SubredditModqueueProgressMapping getSubredditModqueueProgressMapping();
 }

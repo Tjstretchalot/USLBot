@@ -114,18 +114,7 @@ public abstract class MysqlObjectMapping<A> implements ObjectMapping<A>, SchemaV
 		ResultSet columns = metadata.getColumns(null, null, table, "%");
 		
 		while(columns.next()) {
-			String name = columns.getString(4);
-			int datatype = columns.getInt(5);
-			String autoIncrement = columns.getString(23);
-			
-			MysqlColumn real = new MysqlColumn(datatype, name, autoIncrement.equals("YES"));
-			Optional<MysqlColumn> found = toFind.stream().filter(col -> col.name.equals(name)).findFirst();
-			
-			if(!found.isPresent()) {
-				errors.add(String.format("unexpected column %s", name));
-			}else if(!real.equals(found.get())) {
-				errors.add(found.get().getDifferencePretty(real));
-			}
+			verifyColumn(toFind, errors, columns);
 		}
 		
 		columns.close();
@@ -133,6 +122,31 @@ public abstract class MysqlObjectMapping<A> implements ObjectMapping<A>, SchemaV
 		if(errors.size() > 0) {
 			String errorMess = errors.stream().collect(Collectors.joining("; "));
 			throw new IllegalStateException(errorMess);
+		}
+	}
+	
+	/**
+	 * Verifies a column returned from DatabaseMetaData is expected. If the column is unexpected
+	 * or there are differences between it and the expected value, errors should be appended with
+	 * a string describing the issue.
+	 * 
+	 * @param toFind list wrapped version of columns
+	 * @param errors the current errors
+	 * @param columns the result set. you should check the current row of the result set
+	 * @throws SQLException if one occurs
+	 */
+	protected void verifyColumn(List<MysqlColumn> toFind, List<String> errors, ResultSet columns) throws SQLException {
+		String name = columns.getString(4);
+		int datatype = columns.getInt(5);
+		String autoIncrement = columns.getString(23);
+		
+		MysqlColumn real = new MysqlColumn(datatype, name, autoIncrement.equals("YES"));
+		Optional<MysqlColumn> found = toFind.stream().filter(col -> col.name.equals(name)).findFirst();
+		
+		if(!found.isPresent()) {
+			errors.add(String.format("unexpected column %s", name));
+		}else if(!real.equals(found.get())) {
+			errors.add(found.get().getDifferencePretty(real));
 		}
 	}
 }

@@ -13,12 +13,14 @@ import me.timothy.bots.database.MonitoredSubredditMapping;
 import me.timothy.bots.database.PersonMapping;
 import me.timothy.bots.database.ResponseMapping;
 import me.timothy.bots.database.SchemaValidator;
+import me.timothy.bots.database.SubredditModqueueProgressMapping;
 import me.timothy.bots.database.SubscribedHashtagMapping;
 import me.timothy.bots.database.mysql.MysqlBanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlFullnameMapping;
 import me.timothy.bots.database.mysql.MysqlMonitoredSubredditMapping;
 import me.timothy.bots.database.mysql.MysqlPersonMapping;
 import me.timothy.bots.database.mysql.MysqlResponseMapping;
+import me.timothy.bots.database.mysql.MysqlSubredditModqueueProgressMapping;
 import me.timothy.bots.database.mysql.MysqlSubscribedHashtagMapping;
 import me.timothy.bots.models.Fullname;
 
@@ -38,6 +40,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private BanHistoryMapping banHistoryMapping;
 	private ResponseMapping responseMapping;
 	private SubscribedHashtagMapping subscribedHashtagMapping;
+	private SubredditModqueueProgressMapping subredditModqueueProgressMapping;
 	
 	private SchemaValidator fullnameValidator;
 	private SchemaValidator monitoredSubredditValidator;
@@ -45,6 +48,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private SchemaValidator banHistoryValidator;
 	private SchemaValidator responseValidator;
 	private SchemaValidator subscribedHashtagValidator;
+	private SchemaValidator subredditModqueueProgressValidator;
 	
 	/**
 	 * Connects to the specified database. If there is an active connection
@@ -73,6 +77,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		banHistoryMapping = new MysqlBanHistoryMapping(this, connection);
 		responseMapping = new MysqlResponseMapping(this, connection);
 		subscribedHashtagMapping = new MysqlSubscribedHashtagMapping(this, connection);
+		subredditModqueueProgressMapping = new MysqlSubredditModqueueProgressMapping(this, connection);
 		
 		fullnameValidator = (SchemaValidator) fullnameMapping;
 		monitoredSubredditValidator = (SchemaValidator) monitoredSubredditMapping;
@@ -80,6 +85,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		banHistoryValidator = (SchemaValidator) banHistoryMapping;
 		responseValidator = (SchemaValidator) responseMapping;
 		subscribedHashtagValidator = (SchemaValidator) subscribedHashtagMapping;
+		subredditModqueueProgressValidator = (SchemaValidator) subredditModqueueProgressMapping;
 	}
 
 	/**
@@ -99,6 +105,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		banHistoryMapping = null;
 		responseMapping = null;
 		subscribedHashtagMapping = null;
+		subredditModqueueProgressMapping = null;
 		
 		fullnameValidator = null;
 		monitoredSubredditValidator = null;
@@ -106,6 +113,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		banHistoryValidator = null;
 		responseValidator = null;
 		subscribedHashtagValidator = null;
+		subredditModqueueProgressValidator = null;
 	}
 
 
@@ -116,6 +124,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	 */
 	public void purgeAll() {
 		/* REVERSE ORDER of validateTableState */
+		subredditModqueueProgressValidator.purgeSchema();
 		subscribedHashtagValidator.purgeSchema();
 		responseValidator.purgeSchema();
 		banHistoryValidator.purgeSchema();
@@ -139,6 +148,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		banHistoryValidator.validateSchema();
 		responseValidator.validateSchema();
 		subscribedHashtagValidator.validateSchema();
+		subredditModqueueProgressValidator.validateSchema();
 	}
 	
 	@Override
@@ -169,6 +179,11 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public SubscribedHashtagMapping getSubscribedHashtagMapping() {
 		return subscribedHashtagMapping;
+	}
+	
+	@Override
+	public SubredditModqueueProgressMapping getSubredditModqueueProgressMapping() {
+		return subredditModqueueProgressMapping;
 	}
 	
 	/**
