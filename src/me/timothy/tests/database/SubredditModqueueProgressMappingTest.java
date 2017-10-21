@@ -111,7 +111,6 @@ public class SubredditModqueueProgressMappingTest {
 		
 		assertNotEquals(subAProgr.id, subBProgr.id);
 		
-
 		fromDB = database.getSubredditModqueueProgressMapping().fetchForSubreddit(subA.id);
 		assertNotNull(fromDB);
 		assertEquals(subAProgr, fromDB);

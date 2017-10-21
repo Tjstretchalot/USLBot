@@ -14,4 +14,5 @@ public interface MappingDatabase {
 	public ResponseMapping getResponseMapping();
 	public SubscribedHashtagMapping getSubscribedHashtagMapping();
 	public SubredditModqueueProgressMapping getSubredditModqueueProgressMapping();
+	public SubredditPropagateStatusMapping getSubredditPropagateStatusMapping();
 }

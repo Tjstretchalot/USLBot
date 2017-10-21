@@ -14,6 +14,7 @@ import me.timothy.bots.database.PersonMapping;
 import me.timothy.bots.database.ResponseMapping;
 import me.timothy.bots.database.SchemaValidator;
 import me.timothy.bots.database.SubredditModqueueProgressMapping;
+import me.timothy.bots.database.SubredditPropagateStatusMapping;
 import me.timothy.bots.database.SubscribedHashtagMapping;
 import me.timothy.bots.database.mysql.MysqlBanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlFullnameMapping;
@@ -21,6 +22,7 @@ import me.timothy.bots.database.mysql.MysqlMonitoredSubredditMapping;
 import me.timothy.bots.database.mysql.MysqlPersonMapping;
 import me.timothy.bots.database.mysql.MysqlResponseMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditModqueueProgressMapping;
+import me.timothy.bots.database.mysql.MysqlSubredditPropagateStatusMapping;
 import me.timothy.bots.database.mysql.MysqlSubscribedHashtagMapping;
 import me.timothy.bots.models.Fullname;
 
@@ -41,6 +43,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private ResponseMapping responseMapping;
 	private SubscribedHashtagMapping subscribedHashtagMapping;
 	private SubredditModqueueProgressMapping subredditModqueueProgressMapping;
+	private SubredditPropagateStatusMapping subredditPropagateStatusMapping;
 	
 	private SchemaValidator fullnameValidator;
 	private SchemaValidator monitoredSubredditValidator;
@@ -49,6 +52,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private SchemaValidator responseValidator;
 	private SchemaValidator subscribedHashtagValidator;
 	private SchemaValidator subredditModqueueProgressValidator;
+	private SchemaValidator subredditPropagateStatusValidator;
 	
 	/**
 	 * Connects to the specified database. If there is an active connection
@@ -78,6 +82,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		responseMapping = new MysqlResponseMapping(this, connection);
 		subscribedHashtagMapping = new MysqlSubscribedHashtagMapping(this, connection);
 		subredditModqueueProgressMapping = new MysqlSubredditModqueueProgressMapping(this, connection);
+		subredditPropagateStatusMapping = new MysqlSubredditPropagateStatusMapping(this, connection);
 		
 		fullnameValidator = (SchemaValidator) fullnameMapping;
 		monitoredSubredditValidator = (SchemaValidator) monitoredSubredditMapping;
@@ -86,6 +91,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		responseValidator = (SchemaValidator) responseMapping;
 		subscribedHashtagValidator = (SchemaValidator) subscribedHashtagMapping;
 		subredditModqueueProgressValidator = (SchemaValidator) subredditModqueueProgressMapping;
+		subredditPropagateStatusValidator = (SchemaValidator) subredditPropagateStatusMapping;
 	}
 
 	/**
@@ -106,6 +112,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		responseMapping = null;
 		subscribedHashtagMapping = null;
 		subredditModqueueProgressMapping = null;
+		subredditPropagateStatusMapping = null;
 		
 		fullnameValidator = null;
 		monitoredSubredditValidator = null;
@@ -114,6 +121,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		responseValidator = null;
 		subscribedHashtagValidator = null;
 		subredditModqueueProgressValidator = null;
+		subredditPropagateStatusValidator = null;
 	}
 
 
@@ -124,6 +132,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	 */
 	public void purgeAll() {
 		/* REVERSE ORDER of validateTableState */
+		subredditPropagateStatusValidator.purgeSchema();
 		subredditModqueueProgressValidator.purgeSchema();
 		subscribedHashtagValidator.purgeSchema();
 		responseValidator.purgeSchema();
@@ -149,6 +158,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		responseValidator.validateSchema();
 		subscribedHashtagValidator.validateSchema();
 		subredditModqueueProgressValidator.validateSchema();
+		subredditPropagateStatusValidator.validateSchema();
 	}
 	
 	@Override
@@ -184,6 +194,11 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public SubredditModqueueProgressMapping getSubredditModqueueProgressMapping() {
 		return subredditModqueueProgressMapping;
+	}
+	
+	@Override
+	public SubredditPropagateStatusMapping getSubredditPropagateStatusMapping() {
+		return subredditPropagateStatusMapping;
 	}
 	
 	/**

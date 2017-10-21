@@ -12,7 +12,8 @@ import org.junit.runners.Suite.SuiteClasses;
 			MysqlPersonMappingTest.class,
 			MysqlBanHistoryMappingTest.class,
 			MysqlSubscribedHashtagMappingTest.class,
-			MysqlSubredditModqueueProgressMappingTest.class
+			MysqlSubredditModqueueProgressMappingTest.class,
+			MysqlSubredditPropagateStatusMappingTest.class
 		})
 public class MysqlDatabaseTests {
 
