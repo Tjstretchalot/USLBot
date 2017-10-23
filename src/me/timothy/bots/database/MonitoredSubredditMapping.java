@@ -16,4 +16,13 @@ public interface MonitoredSubredditMapping extends ObjectMapping<MonitoredSubred
 	 * @return the subreddits concatenated
 	 */
 	public String fetchAllAndConcatenate();
+	
+	/**
+	 * Fetch the monitored subreddit in the database with the specified
+	 * id, or null if no such monitored subreddit exists in the database.
+	 * 
+	 * @param id the id to search for
+	 * @return monitored subreddit with specified id or null
+	 */
+	public MonitoredSubreddit fetchByID(int id);
 }

@@ -3,21 +3,21 @@ package me.timothy.bots;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.Level;
 import org.json.simple.parser.ParseException;
 
+import me.timothy.bots.memory.BanHistoryPropagateResult;
+import me.timothy.bots.memory.ModmailPMInformation;
+import me.timothy.bots.memory.UserBanInformation;
+import me.timothy.bots.memory.UserPMInformation;
 import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
-import me.timothy.bots.models.SubscribedHashtag;
-import me.timothy.bots.responses.ResponseFormatter;
-import me.timothy.bots.responses.ResponseInfo;
-import me.timothy.bots.responses.ResponseInfoFactory;
+import me.timothy.bots.models.SubredditModqueueProgress;
+import me.timothy.bots.models.SubredditPropagateStatus;
 import me.timothy.bots.summon.CommentSummon;
 import me.timothy.bots.summon.LinkSummon;
 import me.timothy.bots.summon.PMSummon;
@@ -36,6 +36,7 @@ import me.timothy.jreddit.info.Thing;
 public class USLBotDriver extends BotDriver {
 	protected List<MonitoredSubreddit> monitoredSubreddits;
 	protected USLDatabaseBackupManager backupManager;
+	protected USLBanHistoryPropagator propagator;
 	
 	/**
 	 * Creates a new bot driver that has the specified context to
@@ -52,6 +53,7 @@ public class USLBotDriver extends BotDriver {
 			PMSummon[] pmSummons, LinkSummon[] submissionSummons) {
 		super(database, config, bot, commentSummons, pmSummons, submissionSummons);
 		backupManager = new USLDatabaseBackupManager(database, config);
+		propagator = new USLBanHistoryPropagator(database, config);
 	}
 
 	@Override
@@ -64,6 +66,9 @@ public class USLBotDriver extends BotDriver {
 		
 		logger.trace("Scanning for new ban reports..");
 		scanForBans();
+		
+		logger.trace("Propagating bans..");
+		propagateBans();
 		
 		logger.trace("Considering backing up database..");
 		considerBackupDatabase();
@@ -88,228 +93,339 @@ public class USLBotDriver extends BotDriver {
 	 */
 	protected void scanForBans() {
 		for(MonitoredSubreddit sub : monitoredSubreddits) {
-			logger.trace("Scanning " + sub.subreddit + " for any new actions...");
+			logger.trace("Scanning " + sub.subreddit + " for any new bans...");
 			scanSubForBans(sub);
 		}
 	}
 	
 	/**
-	 * Scans a particular moderated subreddits moderation log for any bans
+	 * Scans a particular moderated subreddits moderation log for any bans. Uses
+	 * the SubredditModqueueProgressMapping in order to ensure no work is duplicated
+	 * and that the subreddit is completely scanned.
 	 * 
 	 * @param sub the subreddit to scan
 	 */
 	protected void scanSubForBans(MonitoredSubreddit sub) {
-		final int MAX_PAGES = 5;
+		USLDatabase db = (USLDatabase) database;
 		
-		boolean foundKnown = false;
-		int pages = 0;
-		String after = null;
-		while(pages < MAX_PAGES && !foundKnown) {
-			Listing actions = getSubBans(sub, after);
-			if(actions == null) {
-				break;
-			}
-			
-			for(int i = 0; i < actions.numChildren(); i++) {
-				Thing child = actions.getChild(i);
-				if(!(child instanceof ModAction)) {
-					logger.debug("Weird thing in mod action listing: " + child.toString());
-					continue;
-				}
+		SubredditModqueueProgress progress = db.getSubredditModqueueProgressMapping().fetchForSubreddit(sub.id);
+		
+		if(progress == null) {
+			logger.warn("SubredditModqueueProgress was not found for subreddit " + sub.subreddit + ", autogenerating!");
+			progress = new SubredditModqueueProgress(-1, sub.id, true, null, null, null);
+			db.getSubredditModqueueProgressMapping().save(progress);
+		}
+		
+		// no more than 3 pages at a time
+		for(int page = 0; page < 3; page++) {
+			if(progress.searchForward) {
+				scanSubForBansForwardSearch(sub, progress);
+			}else {
+				boolean finished = scanSubForBansReverseSearch(sub, progress);
 				
-				ModAction mAction = (ModAction) child;
-				if(database.containsFullname(mAction.id())) {
-					foundKnown = true;
+				if(finished)
 					break;
-				}
-				
-				database.addFullname(mAction.id());
-				
-				if(mAction.action().equals("banuser")) {
-					logger.info("Handling ban id=" + mAction.id() + " by " + mAction.mod() + " targetting " + mAction.targetAuthor() + " for "+ mAction.details());
-					handleSubBan(sub, mAction);
-				}
 			}
-			
-			after = actions.after();
-			pages++;
 		}
 	}
 	
 	/**
-	 * Handle a ban from a monitored subreddit.
-	 *  
-	 * @param sub the subreddit the ban was issued in
-	 * @param ban the action performed 
+	 * Scans one page of a subreddits modactions using a forward search technique.
+	 * 
+	 * @param sub the subreddit to search
+	 * @param progress current progress information
 	 */
-	protected void handleSubBan(MonitoredSubreddit sub, ModAction ban) {
-		if(!ban.details().equals("permanent")) {
-			logger.trace("Skipping (not a permanent ban!)");
-			return;
+	protected void scanSubForBansForwardSearch(MonitoredSubreddit sub, SubredditModqueueProgress progress) {
+		USLDatabase db = (USLDatabase) database;
+		BanHistory latestBanHistory = null;
+		if(progress.latestBanHistoryID != null) {
+			latestBanHistory = db.getBanHistoryMapping().fetchByID(progress.latestBanHistoryID);
 		}
+		
+		Listing bans = getSubBans(sub, null, latestBanHistory != null ? latestBanHistory.modActionID : null);
+		sleepFor(2000);
+		
+		BanHistory afterBan = null;
+		BanHistory latestBan = null;
+		BanHistory earliestBan = null;
+		for(int i = 0; i < bans.numChildren(); i++) {
+			Thing child = bans.getChild(i);
+			if(!(child instanceof ModAction)) {
+				logger.warn("Got weird child from getSubBans: type=" + child.getClass().getCanonicalName());
+				continue;
+			}
+			
+			ModAction action = (ModAction) child;
+			if(db.getBanHistoryMapping().fetchByModActionID(action.id()) != null) {
+				continue;
+			}
+			
+			BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action);
+			logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
+			
+			if(bans.after() != null && action.id().equalsIgnoreCase(bans.after())) {
+				afterBan = banHistory;
+			}
+			
+			if(latestBan == null || banHistory.occurredAt.getTime() > latestBan.occurredAt.getTime()) {
+				latestBan = banHistory;
+			}
+			
+			if(earliestBan == null || banHistory.occurredAt.getTime() < earliestBan.occurredAt.getTime()) {
+				earliestBan = banHistory;
+			}
+		}
+		
+		if(progress.newestBanHistoryID == null) {
+			if(earliestBan == null) {
+				logger.error("Either there are 0 bans in " + sub.subreddit + " or something has gone horribly wrong. Pming usl");
+				sendModmail("universalscammerlist", "USLBot Unrecoverable Errors", "When monitoring /r/" + sub.subreddit + " I "
+						+ "found no bans. I think it's more likely something went wrong. Shutting down.");
+				logger.error("Initiating shutdown..");
+				System.exit(1);
+			}else {
+				progress.newestBanHistoryID = earliestBan.id;
+			}
+		}
+		
+		if(bans.after() != null) {
+			if(afterBan != latestBan) { 
+				logger.warn("Listing after() is not equal to the ban in the listing with the latest timestamp!");
+				logger.warn(bans.toString());
+			}
+			
+			if(afterBan == null) {
+				logger.warn("Listing after() references an id that isn't in the listing!");
+				logger.warn(bans.toString());
+				
+				if(latestBan != null) {
+					progress.latestBanHistoryID = latestBan.id; 
+				}else {
+					logger.error("Could not fallback to latest ban by timestamp; that was null too!");
+					logger.error("This position is unrecoverable and will have the subreddit looping. Sending modmail to USL");
+					sendModmail("universalscammerlist", "USLBot Unrecoverable Errors", "When monitoring /r/" + sub.subreddit + " I "
+							+ "recieved a listing of BanActions. That listing was *completely empty*, but it returned after() not null! "
+							+ "Most likely I have incorrect assumptions about how the reddit api handles pagination. "
+							+ "So I will shut down until someone can check me out.\n"
+							+ "\n"
+							+ "---\n"
+							+ "\n"
+							+ "I was using after=" + latestBanHistory != null ? latestBanHistory.modActionID : null);
+					logger.error("Initiating shutdown..");
+					System.exit(1);
+				}
+			}else {
+				progress.latestBanHistoryID = afterBan.id;
+			}
+			
+			db.getSubredditModqueueProgressMapping().save(progress);
+		}else {
+			logger.info("Reached end of /r/" + sub.subreddit + " modqueue actions.");
+			
+			if(latestBan != null) {
+				progress.latestBanHistoryID = latestBan.id;
+			}else {
+				logger.warn("The last page was empty for " + sub.subreddit + ". There is a chance this means that reddits pagination failed!");
+			}
+			
+			progress.searchForward = false;
+			db.getSubredditModqueueProgressMapping().save(progress);
+		}
+	}
 
-		USLDatabase db = (USLDatabase)database;
-		Person modPerson = db.getPersonMapping().fetchOrCreateByUsername(ban.mod());
-		Person bannedPerson = db.getPersonMapping().fetchOrCreateByUsername(ban.targetAuthor());
-		long now = System.currentTimeMillis();
-		if(ban.mod().equalsIgnoreCase(bot.getUser().getUsername())) {
-			logger.trace("Saving and moving on (its my own ban)");
-			BanHistory banHistory = new BanHistory(-1, sub.id, modPerson.id, bannedPerson.id, BanHistory.BanReasonIdentifier.Propagate.id,
-					ban.description(), ban.id(), false, new Timestamp(now), new Timestamp((long)(ban.createdUTC() * 1000)), new Timestamp(now));
-			db.getBanHistoryMapping().save(banHistory);
-			return;
+	/**
+	 * Scans one page of a subreddits modactions using a reverse search technique. Returns true if
+	 * the search finished (so there are no more pages to search)
+	 * 
+	 * @param sub subreddit to search
+	 * @param progress progress information
+	 * @return if there is no more new information on sub to find right now
+	 */
+	protected boolean scanSubForBansReverseSearch(MonitoredSubreddit sub, SubredditModqueueProgress progress) {
+		USLDatabase db = (USLDatabase) database;
+		
+		if(progress.newestBanHistoryID == null) {
+			logger.error("scanSubForBansReverseSearch and progress.newestBanHistory id == null. This is not going to work.");
+			logger.error("Initiating shutdown..");
+			System.exit(1);
 		}
 		
+		BanHistory newestBanHistory = db.getBanHistoryMapping().fetchByID(progress.newestBanHistoryID);
 		
-		logger.trace("Saving ban history..");
-		BanHistory banHistory = new BanHistory(-1, sub.id, modPerson.id, bannedPerson.id, BanHistory.BanReasonIdentifier.SubBan.id, 
-				ban.description(), ban.id(), false, new Timestamp(now), new Timestamp((long)(ban.createdUTC() * 1000)), new Timestamp(now));
+		Listing beforeNewest = getSubBans(sub, newestBanHistory.modActionID, null);
+		sleepFor(2000);
+		
+		BanHistory earliestBan = null;
+		BanHistory beforeBan = null;
+		for(int i = 0; i < beforeNewest.numChildren(); i++) {
+			Thing thing = beforeNewest.getChild(i);
+			if(!(thing instanceof ModAction)) {
+				logger.warn("scanSubForBansReverseSearch got weird thing type=" + thing.getClass().getCanonicalName());
+				continue;
+			}
+			
+			ModAction action = (ModAction) thing;
+			if(db.getBanHistoryMapping().fetchByModActionID(action.id()) != null) {
+				continue;
+			}
+			
+			BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action);
+			logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
+			
+			if(beforeNewest.before() != null && action.id().equalsIgnoreCase(beforeNewest.before())) {
+				beforeBan = banHistory;
+			}
+			
+			if(earliestBan == null || banHistory.occurredAt.getTime() < earliestBan.occurredAt.getTime()) {
+				earliestBan = banHistory;
+			}
+		}
+		
+		if(beforeNewest.before() != null) {
+			if(beforeBan == null) {
+				logger.error("beforeNewest.before() was not null and in the listing! I don't know how to recover!");
+				logger.error("Shutting down..");
+				System.exit(1);
+			}
+			
+			if(beforeBan != earliestBan) {
+				logger.warn("beforeNewest.before() is not the earliest ban in the listing. this should be recoverable but it's weird");
+			}
+			
+			progress.newestBanHistoryID = beforeBan.id;
+			db.getSubredditModqueueProgressMapping().save(progress);
+			return false;
+		}else {
+			if(earliestBan == null) {
+				return true; // got an empty listing. no new bans since last check
+			}
+			
+			progress.newestBanHistoryID = earliestBan.id;
+			db.getSubredditModqueueProgressMapping().save(progress);
+			return true;
+		}
+	}
+	
+	/**
+	 * Create a ban history from the specified mod action, save it to the database, and return it.
+	 * 
+	 * @param db database casted
+	 * @param action the action to save
+	 * @return the ban history
+	 */
+	protected BanHistory createAndSaveBanHistoryFromAction(USLDatabase db, MonitoredSubreddit sub, ModAction action) {
+		Person mod = db.getPersonMapping().fetchOrCreateByUsername(action.mod());
+		Person banned = db.getPersonMapping().fetchOrCreateByUsername(action.targetAuthor());
+		BanHistory banHistory = new BanHistory(-1, sub.id, mod.id, banned.id, action.id(), action.description(), action.details(), 
+				new Timestamp((long)(action.createdUTC() * 1000)));
 		db.getBanHistoryMapping().save(banHistory);
+		return banHistory;
+	}
+	
+	/**
+	 * Propagates bans that were scanned by scanSubForBans. Uses the SubredditPropagateStatusMapping
+	 * in order to ensure that no work is duplicated and that all bans are propagated to all subreddits.
+	 * 
+	 * Uses the USLBanHistoryPropagator to decide how to propagate for each subreddit.
+	 */
+	protected void propagateBans() {
+		for(MonitoredSubreddit subreddit : monitoredSubreddits) {
+			logger.trace("Propagating bans to " + subreddit.subreddit);
+			propagateBansForSubreddit(subreddit);
+		}
+	}
+	
+	/**
+	 * Propagates the bans for the specified subreddit. Uses SubredditPropagateStatusMapping
+	 * in order to ensure no work is duplicated and that all bans are propagated to the subreddit.
+	 * 
+	 * @param subreddit the subreddit
+	 */
+	protected void propagateBansForSubreddit(MonitoredSubreddit subreddit) {
+		USLDatabase db = (USLDatabase)database;
 		
-		if(sub.writeOnly) {
-			logger.trace("Subreddit is write-only. Flagging as suppressed and returning..");
-			banHistory.suppressed = true;
-			db.getBanHistoryMapping().save(banHistory);
-			return;
+		SubredditPropagateStatus status = db.getSubredditPropagateStatusMapping().fetchForSubreddit(subreddit.id);
+		
+		if(status == null) {
+			logger.warn("SubredditPropagateStatus for subreddit " + subreddit.subreddit + " was not found, autogenerating!");
+			status = new SubredditPropagateStatus(-1, subreddit.id, null, null);
+			db.getSubredditPropagateStatusMapping().save(status);
 		}
 		
-		for(MonitoredSubreddit otherSub : monitoredSubreddits) {
-			if(otherSub.subreddit.equals(sub.subreddit))
-				continue;
-			if(otherSub.readOnly)
-				continue;
-			logger.printf(Level.TRACE, "Checking if %s is tracking any relevant hashtags..", otherSub.subreddit);
-			List<SubscribedHashtag> relevantTags = getRelevantSubscribedHashtags(otherSub, ban.description());
-			if(relevantTags.size() <= 0) {
-				logger.printf(Level.INFO, "%s does not subscribe to anything in %s", otherSub.subreddit, ban.description());
-				continue;
+		
+		// we will break out early after 250 ban histories or 3 ban histories
+		// requiring reddit interactions, whichever comes first
+		
+		for(int i = 0; i < 5; i++) {
+			int idAbove = status.lastBanHistoryID == null ? 0 : status.lastBanHistoryID;
+			List<BanHistory> bansToPropagate = db.getBanHistoryMapping().fetchBanHistoriesAboveIDSortedByIDAsc(idAbove, 50);
+			if(bansToPropagate.isEmpty()) {
+				logger.trace("Out of things to propagate for " + subreddit.subreddit);
+				return;
 			}
 			
-			String tagsStringified = String.join(", ", relevantTags.stream().map(tag -> '"' + tag.hashtag + '"').collect(Collectors.toList()));
-			logger.printf(Level.INFO, "The following relevant tags triggered on %s: %s", ban.description(), tagsStringified);
-			
-			logger.printf(Level.TRACE, "Checking if %s is already banned on %s..", ban.targetAuthor(), sub.subreddit);
-			if(checkIfBanned(otherSub, ban.targetAuthor())) {
-				logger.printf(Level.INFO, "Not banning %s from %s - already banned!", ban.targetAuthor(), otherSub.subreddit);
-				continue;
-			}
-			
-			logger.printf(Level.INFO, "Banning %s from %s as propagating from %s banning him on %s with action %s..", ban.targetAuthor(), otherSub.subreddit, ban.mod(), sub.subreddit, ban.id());
-			formatMessagesAndBanUserDueToBan(otherSub, ban, sub, tagsStringified);
-			
-			if(!otherSub.silent) {
-				logger.printf(Level.TRACE, "Sending mail to /r/%s about banning %s", otherSub.subreddit, ban.targetAuthor());
+			int didSomethingCounter = 0;
+			for(BanHistory bh : bansToPropagate) {
+				logger.printf(Level.DEBUG, "Propagating bh id=%d (%d banned on %d by %d) to %s", bh.id, bh.bannedPersonID, bh.monitoredSubredditID, bh.modPersonID, subreddit.subreddit);
 				
-				formatMessagesAndSendModmail(otherSub, ban, sub, tagsStringified);
+				BanHistoryPropagateResult result = propagator.propagateBan(subreddit, bh);
+				if(handlePropagateResult(result)) {
+					didSomethingCounter++;
+				}
+				
+				status.lastBanHistoryID = bh.id;
+				db.getSubredditPropagateStatusMapping().save(status);
+				
+				if(didSomethingCounter > 3) {
+					logger.trace("Detected that " + subreddit.subreddit + " is taking a long time to propagate (many reddit interactions). Going onto next thing.");
+					return;
+				}
 			}
 		}
-	}
-	
-	/**
-	 * Determines if sub is subscribed to anything contains in banDesc.
-	 * 
-	 * @param sub the subreddit
-	 * @param banDesc the ban description
-	 * @return if sub subscribes to something in banDesc
-	 */
-	protected List<SubscribedHashtag> getRelevantSubscribedHashtags(MonitoredSubreddit sub, String banDesc) {
-		final String banDescLower = banDesc.toLowerCase();
-		final USLDatabase db = (USLDatabase) database;
 		
-		List<SubscribedHashtag> hashtags = db.getSubscribedHashtagMapping().fetchForSubreddit(sub.id, false);
-		List<SubscribedHashtag> result = new ArrayList<>();
-		for(SubscribedHashtag hashtag : hashtags) {
-			if(banDescLower.contains(hashtag.hashtag.toLowerCase())) {
-				result.add(hashtag);
-			}
+		logger.trace("Detected that " + subreddit.subreddit + " is taking a long time to propagate (many ban histories checked). Going onto next thing.");
+	}
+	
+	/**
+	 * Do the things that the result says to do.
+	 * 
+	 * @param result the result
+	 * @return if any reddit requests were done
+	 */
+	protected boolean handlePropagateResult(BanHistoryPropagateResult result) {
+		boolean didSomething = false;
+		for(UserBanInformation ban : result.bans) {
+			logger.printf(Level.INFO, "Banning %s on %s..", ban.person.username, ban.subreddit.subreddit);
+			handleBanUser(ban);
+			sleepFor(2000);
+			didSomething = true;
 		}
-		return result;
+		
+		for(ModmailPMInformation modPm : result.modmailPMs) {
+			logger.printf(Level.INFO, "Sending some modmail to %s (title=%s)", modPm.subreddit, modPm.title);
+			logger.trace("body=" + modPm.body);
+			sendModmail(modPm.subreddit.subreddit, modPm.title, modPm.body);
+			sleepFor(2000);
+			didSomething = true;
+		}
+		
+		for(UserPMInformation userPm : result.userPMs) {
+			logger.printf(Level.INFO, "Sending some mail to %s (title=%s)", userPm.person.username, userPm.title);
+			sendMessage(userPm.person.username, userPm.title, userPm.body);
+			sleepFor(2000);
+			didSomething = true;
+		}
+		return didSomething;
 	}
+	
 	/**
-	 * Bans the target of the modaction on the subToBanOn. Formats both the message, reason, and note
-	 * appropriately.
+	 * Bans the specified user from the specified subreddit. This is just 
+	 * a wrapper around handleBanUser(username, message, reason, note)
 	 * 
-	 * @param subToBanOn the sub to ban ban.targetAuthor() on
-	 * @param ban the original ban
-	 * @param subWhichBanned the MonitoredSubreddit for ban.subreddit()
-	 * @param tagsStringified 
+	 * @param banInfo the information regarding the ban
 	 */
-	protected void formatMessagesAndBanUserDueToBan(MonitoredSubreddit subToBanOn, ModAction ban, MonitoredSubreddit subWhichBanned, String tagsStringified) {
-		USLDatabase db = (USLDatabase) database;
-		ResponseInfo banMessageRespInfo = new ResponseInfo(ResponseInfoFactory.base);
-		banMessageRespInfo.addTemporaryString("original mod", ban.mod());
-		banMessageRespInfo.addTemporaryString("original description", ban.description());
-		banMessageRespInfo.addTemporaryString("original subreddit", ban.subreddit());
-		banMessageRespInfo.addTemporaryString("triggering tags", tagsStringified);
-		banMessageRespInfo.addTemporaryString("new subreddit", subToBanOn.subreddit);
-		ResponseFormatter banMessageFormatter = new ResponseFormatter(db.getResponseMapping().fetchByName("propagated_ban_message").responseBody, banMessageRespInfo);
-		String banMessage = banMessageFormatter.getFormattedResponse(config, database);
-		ResponseInfo banNoteRespInfo = new ResponseInfo(banMessageRespInfo);
-		ResponseFormatter banNoteFormatter = new ResponseFormatter(db.getResponseMapping().fetchByName("propagated_ban_note").responseBody, banNoteRespInfo);
-		String banNote = banNoteFormatter.getFormattedResponse(config, database);
-		banUser(subWhichBanned, ban.targetAuthor(), banMessage, "other", banNote);
-	}
-	
-	/**
-	 * Sends modmail to subToMail describing a ban that resulting from a users ban.
-	 * 
-	 * @param subToMail The sub to modmail
-	 * @param ban the original ban
-	 * @param subWhichBanned the MonitoredSubreddit version of ban.subreddit()
-	 */
-	protected void formatMessagesAndSendModmail(MonitoredSubreddit subToMail, ModAction ban, MonitoredSubreddit subWhichBanned, String tagsStringified) {
-		USLDatabase db = (USLDatabase) database;
-		ResponseInfo messageRespInfo = new ResponseInfo(ResponseInfoFactory.base);
-		messageRespInfo.addTemporaryString("original mod", ban.mod());
-		messageRespInfo.addTemporaryString("original description", ban.description());
-		messageRespInfo.addTemporaryString("original subreddit", ban.subreddit());
-		messageRespInfo.addTemporaryString("original timestamp", timeToPretty(ban.createdUTC()));
-		messageRespInfo.addTemporaryString("original id", ban.id());
-		messageRespInfo.addTemporaryString("banned user", ban.targetAuthor());
-		messageRespInfo.addTemporaryString("triggering tags", tagsStringified);
-		ResponseFormatter modMailTitleFormatter = new ResponseFormatter(db.getResponseMapping().fetchByName("propagated_ban_modmail_title").responseBody, messageRespInfo);
-		String modMailTitle = modMailTitleFormatter.getFormattedResponse(config, database);
-		ResponseFormatter modMailBodyFormatter = new ResponseFormatter(db.getResponseMapping().fetchByName("propagated_ban_modmail_body").responseBody, messageRespInfo);
-		String modMailBody = modMailBodyFormatter.getFormattedResponse(config, database);
-		sendModmail(subWhichBanned, modMailTitle, modMailBody);
-	}
-	
-	/**
-	 * Determine if usernameToCheck is banned on sub
-	 * @param sub the subreddit
-	 * @param usernameToCheck the username to check
-	 * @return if banned on sub
-	 */
-	protected boolean checkIfBanned(MonitoredSubreddit sub, String usernameToCheck) {
-		return new Retryable<Boolean>("check if " + usernameToCheck + " is banned on " + sub.subreddit, maybeLoginAgainRunnable) {
-
-			@Override
-			protected Boolean runImpl() throws Exception {
-				Listing listing = RedditUtils.getBannedUsersForSubredditByName(sub.subreddit, usernameToCheck, bot.getUser());
-				return listing.numChildren() > 0;
-			}
-			
-		}.run().booleanValue();
-	}
-	
-	/**
-	 * Bans the specified user from the specified subreddit
-	 * @param sub the subreddit to ban from
-	 * @param userToBan the user to ban
-	 * @param banMessage the message to pass to the user
-	 * @param banReason the string "other"
-	 * @param note the note to moderators
-	 */
-	protected void banUser(MonitoredSubreddit sub, String userToBan, String banMessage, String banReason, String note) {
-		new Retryable<Boolean>("ban " + userToBan + " on " + sub.subreddit, maybeLoginAgainRunnable) {
-
-			@Override
-			protected Boolean runImpl() throws Exception {
-				RedditUtils.banFromSubreddit(sub.subreddit, userToBan, banMessage, banReason, note, bot.getUser());
-				return true;
-			}
-			
-		}.run();
+	protected void handleBanUser(UserBanInformation banInfo) {
+		super.handleBanUser(banInfo.person.username, banInfo.banMessage, banInfo.banReason, banInfo.banNote);
 	}
 	
 	/**
@@ -318,16 +434,8 @@ public class USLBotDriver extends BotDriver {
 	 * @param title the title of the message
 	 * @param body the body of the mesage
 	 */
-	protected void sendModmail(MonitoredSubreddit sub, String title, String body) {
-		new Retryable<Boolean>("sending mail to /r/" + sub.subreddit, maybeLoginAgainRunnable) {
-
-			@Override
-			protected Boolean runImpl() throws Exception {
-				RedditUtils.sendPersonalMessage(bot.getUser(), "/r/" + sub.subreddit, title, body);
-				return true;
-			}
-			
-		}.run();
+	protected void sendModmail(String sub, String title, String body) {
+		sendMessage("/r/" + sub, title, body);
 	}
 	
 	/**
@@ -335,14 +443,15 @@ public class USLBotDriver extends BotDriver {
 	 * specific for getting bans for a subreddit inside a retryable
 	 * 
 	 * @param sub monitored subreddit
-	 * @param after after
+	 * @param before before (wont return this id)
+	 * @param after after (wont return this id)
 	 * @return the listing
 	 */
-	protected Listing getSubBans(MonitoredSubreddit sub, String after) {
+	protected Listing getSubBans(MonitoredSubreddit sub, String before, String after) {
 		return new Retryable<Listing>("get subreddit ban actions", maybeLoginAgainRunnable) {
 			@Override
 			protected Listing runImpl() throws Exception {
-				return RedditUtils.getModeratorLog(sub.subreddit, null, "banuser", after, bot.getUser());
+				return RedditUtils.getModeratorLog(sub.subreddit, null, "banuser", before, after, bot.getUser());
 			}
 		}.run();
 	}
@@ -360,7 +469,7 @@ public class USLBotDriver extends BotDriver {
 	 * @param timeMS time since epoch in milliseconds
 	 * @return string representation
 	 */
-	protected String timeToPretty(long timeMS) {
+	public static String timeToPretty(long timeMS) {
 		return new SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss Z").format(new Date(timeMS));
 	}
 	
@@ -369,7 +478,7 @@ public class USLBotDriver extends BotDriver {
 	 * @param timeReddit time since epoch in seconds
 	 * @return string representation
 	 */
-	protected String timeToPretty(double timeReddit) {
+	public static String timeToPretty(double timeReddit) {
 		return timeToPretty((long)(timeReddit * 1000));
 	}
 }

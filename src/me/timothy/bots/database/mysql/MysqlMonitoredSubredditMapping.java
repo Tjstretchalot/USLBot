@@ -116,6 +116,31 @@ public class MysqlMonitoredSubredditMapping extends MysqlObjectMapping<Monitored
 			throw new RuntimeException(e);
 		}
 	}
+	
+	
+
+	@Override
+	public MonitoredSubreddit fetchByID(int id) {
+		try {
+			PreparedStatement statement = connection.prepareStatement("SELECT * FROM " + table + " WHERE id=?");
+			
+			int counter = 1;
+			statement.setInt(counter++, id);
+			
+			MonitoredSubreddit sub = null;
+			ResultSet results = statement.executeQuery();
+			if(results.next()) {
+				sub = fetchFromSet(results);
+			}
+			results.close();
+			statement.close();
+			
+			return sub;
+		} catch (SQLException e) {
+			logger.throwing(e);
+			throw new RuntimeException(e);
+		}
+	}
 
 	/**
 	 * Fetches a monitored subreddit from the result set

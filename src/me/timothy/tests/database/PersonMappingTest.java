@@ -197,4 +197,19 @@ public class PersonMappingTest {
 		assertNotNull(john2);
 		assertEquals(john1, john2);
 	}
+	
+	/**
+	 * fetch or create paul, then fetch by his id, then fetch by a
+	 * different id
+	 */
+	@Test
+	public void testFetchByID() {
+		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
+		
+		Person fromDB = database.getPersonMapping().fetchByID(paul.id);
+		assertEquals(paul, fromDB);
+		
+		fromDB = database.getPersonMapping().fetchByID(paul.id + 1);
+		assertNull(fromDB);
+	}
 }

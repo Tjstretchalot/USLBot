@@ -157,6 +157,28 @@ public class MysqlPersonMapping extends MysqlObjectMapping<Person> implements Sc
 		}
 	}
 	
+	@Override
+	public Person fetchByID(int id) {
+		try {
+			PreparedStatement statement = connection.prepareStatement("SELECT * FROM " + table + " WHERE id=? LIMIT 1");
+
+			int counter = 1;
+			statement.setInt(counter++, id);
+
+			ResultSet results = statement.executeQuery();
+			Person person = null;
+			if(results.next()) {
+				person = fetchFromSet(results);
+			}
+			results.close();
+			statement.close();
+			return person;
+		} catch (SQLException e) {
+			logger.throwing(e);
+			throw new RuntimeException(e);
+		}
+	}
+	
 	/**
 	 * Fetch the person in the current row of the set.
 	 * 

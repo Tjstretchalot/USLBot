@@ -87,5 +87,15 @@ public class MonitoredSubredditMappingTest {
 		assertStringArrContents(resultSplit, testString1, testString2, testString3);
 	}
 
-
+	@Test
+	public void testFetchByID() {
+		MonitoredSubreddit mSub = new MonitoredSubreddit(-1, "johnssub", true, false, true);
+		database.getMonitoredSubredditMapping().save(mSub);
+		
+		MonitoredSubreddit fromDB = database.getMonitoredSubredditMapping().fetchByID(mSub.id);
+		assertEquals(mSub, fromDB);
+		
+		fromDB = database.getMonitoredSubredditMapping().fetchByID(mSub.id + 1);
+		assertNull(fromDB);
+	}
 }

@@ -38,4 +38,13 @@ public interface PersonMapping extends ObjectMapping<Person> {
 	 * @return the person with that email or null
 	 */
 	public Person fetchByEmail(String email);
+	
+	/**
+	 * Get the person with the specified id in the database, or 
+	 * returns null if no such person exists.
+	 * 
+	 * @param id the id to search for
+	 * @return the person with that id
+	 */
+	public Person fetchByID(int id);
 }
