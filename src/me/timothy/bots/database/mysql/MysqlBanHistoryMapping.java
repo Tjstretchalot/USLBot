@@ -143,6 +143,30 @@ public class MysqlBanHistoryMapping extends MysqlObjectMapping<BanHistory> imple
 		}
 	}
 	
+	
+	@Override
+	public BanHistory fetchBanHistoryByPersonAndSubreddit(int bannedPersonId, int monitoredSubredditId) {
+		try {
+			PreparedStatement statement = connection.prepareStatement("SELECT * FROM " + table + " WHERE banned_person_id=? AND monitored_subreddit_id=?");
+			int counter = 1;
+			statement.setInt(counter++, bannedPersonId);
+			statement.setInt(counter++, monitoredSubredditId);
+			
+			ResultSet results = statement.executeQuery();
+			BanHistory ban = null;
+			if(results.next()) {
+				ban = fetchFromSet(results);
+			}
+			results.close();
+			statement.close();
+			
+			return ban;
+		}catch(SQLException e) {
+			logger.throwing(e);
+			throw new RuntimeException(e);
+		}
+	}
+
 	@Override
 	public List<BanHistory> fetchBanHistoriesAboveIDSortedByIDAsc(int id, int num) {
 		try 

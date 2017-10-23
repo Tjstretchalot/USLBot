@@ -170,4 +170,25 @@ public class BanHistoryMappingTest {
 		fromDB = database.getBanHistoryMapping().fetchBanHistoriesAboveIDSortedByIDAsc(3, 2);
 		MysqlTestUtils.assertListContents(fromDB);
 	}
+
+	@Test
+	public void testFetchByBannedAndSubreddit() {
+		BanHistory fromDB = database.getBanHistoryMapping().fetchBanHistoryByPersonAndSubreddit(1, 1);
+		assertNull(fromDB);
+
+		Person john = database.getPersonMapping().fetchOrCreateByUsername("john");
+		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
+	
+		MonitoredSubreddit johnssub = new MonitoredSubreddit(-1, "johnssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(johnssub);
+		long now = System.currentTimeMillis();
+		
+		BanHistory ban = new BanHistory(-1, johnssub.id, john.id, paul.id, "ModAction_ID", "i hate you", "permanent",
+				new Timestamp(now));
+		database.getBanHistoryMapping().save(ban);
+		
+		fromDB = database.getBanHistoryMapping().fetchBanHistoryByPersonAndSubreddit(paul.id, johnssub.id);
+		assertNotNull(fromDB);
+		assertEquals(ban, fromDB);
+	}
 }

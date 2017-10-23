@@ -31,4 +31,14 @@ public interface BanHistoryMapping extends ObjectMapping<BanHistory> {
 	 * @return
 	 */
 	public List<BanHistory> fetchBanHistoriesAboveIDSortedByIDAsc(int id, int num);
+	
+	/**
+	 * Fetches the ban history of a user on a specific subreddit. Useful for determining 
+	 * if we already know that a user is banned on a subreddit.
+	 * 
+	 * @param bannedPersonId the banned person
+	 * @param monitoredSubredditId the monitored subreddit id
+	 * @return ban history with banned user personId and subreddit subredditID or null
+	 */
+	public BanHistory fetchBanHistoryByPersonAndSubreddit(int bannedPersonId, int monitoredSubredditId);
 }

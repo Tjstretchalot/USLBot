@@ -3,6 +3,7 @@ package me.timothy.bots;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -393,15 +394,31 @@ public class USLBotDriver extends BotDriver {
 	 * @return if any reddit requests were done
 	 */
 	protected boolean handlePropagateResult(BanHistoryPropagateResult result) {
+		USLDatabase db = (USLDatabase)database;
 		boolean didSomething = false;
+		List<MonitoredSubreddit> suppressedSubredditPms = new ArrayList<>();
 		for(UserBanInformation ban : result.bans) {
+			BanHistory personBannedOnSubreddit = db.getBanHistoryMapping().fetchBanHistoryByPersonAndSubreddit(ban.person.id, ban.subreddit.id);
+			if(personBannedOnSubreddit != null) {
+				logger.printf(Level.TRACE, "Skipping banning %s on %s.. Already know he's banned from this: %s", 
+						ban.person.username, ban.subreddit.subreddit, personBannedOnSubreddit.toString());
+				suppressedSubredditPms.add(ban.subreddit);
+				continue;
+			}
+			
 			logger.printf(Level.INFO, "Banning %s on %s..", ban.person.username, ban.subreddit.subreddit);
+			
 			handleBanUser(ban);
 			sleepFor(2000);
 			didSomething = true;
 		}
 		
 		for(ModmailPMInformation modPm : result.modmailPMs) {
+			if(suppressedSubredditPms.contains(modPm.subreddit)) {
+				logger.printf(Level.TRACE, "Skipping modmail pm to %s, had a ban that was suppressed", modPm.subreddit);
+				continue;
+			}
+			
 			logger.printf(Level.INFO, "Sending some modmail to %s (title=%s)", modPm.subreddit, modPm.title);
 			logger.trace("body=" + modPm.body);
 			sendModmail(modPm.subreddit.subreddit, modPm.title, modPm.body);
