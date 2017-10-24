@@ -160,20 +160,22 @@ public class USLBotDriver extends BotDriver {
 			if(db.getBanHistoryMapping().fetchByModActionID(action.id()) != null) {
 				continue;
 			}
-			
-			BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action);
-			logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
-			
-			if(bans.after() != null && action.id().equalsIgnoreCase(bans.after())) {
-				afterBan = banHistory;
-			}
-			
-			if(latestBan == null || banHistory.occurredAt.getTime() > latestBan.occurredAt.getTime()) {
-				latestBan = banHistory;
-			}
-			
-			if(earliestBan == null || banHistory.occurredAt.getTime() < earliestBan.occurredAt.getTime()) {
-				earliestBan = banHistory;
+
+			if(action.action().equalsIgnoreCase("banuser")) {
+				BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action);
+				logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
+				
+				if(bans.after() != null && action.id().equalsIgnoreCase(bans.after())) {
+					afterBan = banHistory;
+				}
+				
+				if(latestBan == null || banHistory.occurredAt.getTime() > latestBan.occurredAt.getTime()) {
+					latestBan = banHistory;
+				}
+				
+				if(earliestBan == null || banHistory.occurredAt.getTime() < earliestBan.occurredAt.getTime()) {
+					earliestBan = banHistory;
+				}
 			}
 		}
 		
@@ -270,15 +272,17 @@ public class USLBotDriver extends BotDriver {
 				continue;
 			}
 			
-			BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action);
-			logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
-			
-			if(beforeNewest.before() != null && action.id().equalsIgnoreCase(beforeNewest.before())) {
-				beforeBan = banHistory;
-			}
-			
-			if(earliestBan == null || banHistory.occurredAt.getTime() < earliestBan.occurredAt.getTime()) {
-				earliestBan = banHistory;
+			if(action.action().equalsIgnoreCase("banuser")) {
+				BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action);
+				logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
+				
+				if(beforeNewest.before() != null && action.id().equalsIgnoreCase(beforeNewest.before())) {
+					beforeBan = banHistory;
+				}
+				
+				if(earliestBan == null || banHistory.occurredAt.getTime() < earliestBan.occurredAt.getTime()) {
+					earliestBan = banHistory;
+				}
 			}
 		}
 		
@@ -317,7 +321,16 @@ public class USLBotDriver extends BotDriver {
 	protected BanHistory createAndSaveBanHistoryFromAction(USLDatabase db, MonitoredSubreddit sub, ModAction action) {
 		Person mod = db.getPersonMapping().fetchOrCreateByUsername(action.mod());
 		Person banned = db.getPersonMapping().fetchOrCreateByUsername(action.targetAuthor());
-		BanHistory banHistory = new BanHistory(-1, sub.id, mod.id, banned.id, action.id(), action.description(), action.details(), 
+		
+		BanHistory previousBanOnPerson = db.getBanHistoryMapping().fetchBanHistoryByPersonAndSubreddit(banned.id, sub.id);
+		if(previousBanOnPerson != null) {
+			logger.info("Had information on a ban for user " + banned + " on subreddit " + sub.subreddit + ", but a "
+					+ "newer ban has occurred on that same person on that same subreddit. That could mean that the old "
+					+ "ban was temporary (old details='" + previousBanOnPerson.banDetails + "') or the person was "
+							+ "unbanned and rebanned on the subreddit. Either way, replacing our old information.");
+		}
+		
+		BanHistory banHistory = new BanHistory(previousBanOnPerson == null ? -1 : previousBanOnPerson.id, sub.id, mod.id, banned.id, action.id(), action.description(), action.details(), 
 				new Timestamp((long)(action.createdUTC() * 1000)));
 		db.getBanHistoryMapping().save(banHistory);
 		return banHistory;
