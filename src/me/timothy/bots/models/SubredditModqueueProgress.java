@@ -17,28 +17,28 @@ public class SubredditModqueueProgress {
 	public int monitoredSubredditID;
 	/** True if latestBanHistoryID is not the latest one on reddit */
 	public boolean searchForward;
-	/** The latest ban history id that has been retrieved from reddit */
-	public Integer latestBanHistoryID;
-	/** The newest ban history id that has been retrieved from reddit */
-	public Integer newestBanHistoryID;
+	/** The latest mod action id (from our database) that has been retrieved from reddit */
+	public Integer latestHandledModActionID;
+	/** The newest mod action id (from our database) that has been retrieved from reddit */
+	public Integer newestHandledModActionID;
 	/** When this was last updated. */
 	public Timestamp updatedAt;
 	
 	/**
 	 * @param id id (or -1 if not in database yet)
 	 * @param monitoredSubredditID the id of the monitoredsubreddit
-	 * @param searchForward if latestBanHistoryID is null or less than the latest one on reddit
-	 * @param latestBanHistoryID the latest/OLDEST BanHistory id that was retrieved from this subreddit. may be null
-	 * @param newestBanHistoryID the newest/YOUNGEST BanHistory id that was retrieved from this subreddit. may be null
+	 * @param searchForward if latestHandledModActionID is null or less than the latest one on reddit
+	 * @param latestHandledModActionID the latest/OLDEST HandledModAction id that was retrieved from this subreddit. may be null
+	 * @param newestHandledModActionID the newest/YOUNGEST HandledModAction id that was retrieved from this subreddit. may be null
 	 * @param updatedAt when this was last updated
 	 */
-	public SubredditModqueueProgress(int id, int monitoredSubredditID, boolean searchForward, Integer latestBanHistoryID,
-			Integer newestBanHistoryID, Timestamp updatedAt) {
+	public SubredditModqueueProgress(int id, int monitoredSubredditID, boolean searchForward, Integer latestHandledModActionID,
+			Integer newestHandledModActionID, Timestamp updatedAt) {
 		this.id = id;
 		this.monitoredSubredditID = monitoredSubredditID;
 		this.searchForward = searchForward;
-		this.latestBanHistoryID = latestBanHistoryID;
-		this.newestBanHistoryID = newestBanHistoryID;
+		this.latestHandledModActionID = latestHandledModActionID;
+		this.newestHandledModActionID = newestHandledModActionID;
 		this.updatedAt = updatedAt;
 	}
 	
@@ -48,9 +48,9 @@ public class SubredditModqueueProgress {
 	 * @return if this passes a sanity check
 	 */
 	public boolean isValid() {
-		return monitoredSubredditID > 0 
-				&& (latestBanHistoryID == null || latestBanHistoryID > 0)
-				&& (newestBanHistoryID == null || newestBanHistoryID > 0);
+		return monitoredSubredditID > 0 && 
+				(latestHandledModActionID == null || latestHandledModActionID > 0) &&
+				(newestHandledModActionID == null || newestHandledModActionID > 0);
 	}
 
 	@Override
@@ -58,9 +58,9 @@ public class SubredditModqueueProgress {
 		final int prime = 31;
 		int result = 1;
 		result = prime * result + id;
-		result = prime * result + ((latestBanHistoryID == null) ? 0 : latestBanHistoryID.hashCode());
+		result = prime * result + ((latestHandledModActionID == null) ? 0 : latestHandledModActionID.hashCode());
 		result = prime * result + monitoredSubredditID;
-		result = prime * result + ((newestBanHistoryID == null) ? 0 : newestBanHistoryID.hashCode());
+		result = prime * result + ((newestHandledModActionID == null) ? 0 : newestHandledModActionID.hashCode());
 		result = prime * result + (searchForward ? 1231 : 1237);
 		result = prime * result + ((updatedAt == null) ? 0 : updatedAt.hashCode());
 		return result;
@@ -77,17 +77,17 @@ public class SubredditModqueueProgress {
 		SubredditModqueueProgress other = (SubredditModqueueProgress) obj;
 		if (id != other.id)
 			return false;
-		if (latestBanHistoryID == null) {
-			if (other.latestBanHistoryID != null)
+		if (latestHandledModActionID == null) {
+			if (other.latestHandledModActionID != null)
 				return false;
-		} else if (!latestBanHistoryID.equals(other.latestBanHistoryID))
+		} else if (!latestHandledModActionID.equals(other.latestHandledModActionID))
 			return false;
 		if (monitoredSubredditID != other.monitoredSubredditID)
 			return false;
-		if (newestBanHistoryID == null) {
-			if (other.newestBanHistoryID != null)
+		if (newestHandledModActionID == null) {
+			if (other.newestHandledModActionID != null)
 				return false;
-		} else if (!newestBanHistoryID.equals(other.newestBanHistoryID))
+		} else if (!newestHandledModActionID.equals(other.newestHandledModActionID))
 			return false;
 		if (searchForward != other.searchForward)
 			return false;
@@ -102,7 +102,7 @@ public class SubredditModqueueProgress {
 	@Override
 	public String toString() {
 		return "SubredditModqueueProgress [id=" + id + ", monitoredSubredditID=" + monitoredSubredditID
-				+ ", searchForward=" + searchForward + ", latestBanHistoryID=" + latestBanHistoryID
-				+ ", newestBanHistoryID=" + newestBanHistoryID + ", updatedAt=" + updatedAt + "]";
+				+ ", searchForward=" + searchForward + ", latestHandledModActionID=" + latestHandledModActionID
+				+ ", newestHandledModActionID=" + newestHandledModActionID + ", updatedAt=" + updatedAt + "]";
 	}
 }

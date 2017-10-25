@@ -8,6 +8,8 @@ import org.apache.logging.log4j.Logger;
 
 import me.timothy.bots.database.BanHistoryMapping;
 import me.timothy.bots.database.FullnameMapping;
+import me.timothy.bots.database.HandledAtTimestampMapping;
+import me.timothy.bots.database.HandledModActionMapping;
 import me.timothy.bots.database.MappingDatabase;
 import me.timothy.bots.database.MonitoredSubredditMapping;
 import me.timothy.bots.database.PersonMapping;
@@ -16,14 +18,18 @@ import me.timothy.bots.database.SchemaValidator;
 import me.timothy.bots.database.SubredditModqueueProgressMapping;
 import me.timothy.bots.database.SubredditPropagateStatusMapping;
 import me.timothy.bots.database.SubscribedHashtagMapping;
+import me.timothy.bots.database.UnbanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlBanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlFullnameMapping;
+import me.timothy.bots.database.mysql.MysqlHandledAtTimestampMapping;
+import me.timothy.bots.database.mysql.MysqlHandledModActionMapping;
 import me.timothy.bots.database.mysql.MysqlMonitoredSubredditMapping;
 import me.timothy.bots.database.mysql.MysqlPersonMapping;
 import me.timothy.bots.database.mysql.MysqlResponseMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditModqueueProgressMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditPropagateStatusMapping;
 import me.timothy.bots.database.mysql.MysqlSubscribedHashtagMapping;
+import me.timothy.bots.database.mysql.MysqlUnbanHistoryMapping;
 import me.timothy.bots.models.Fullname;
 
 /**
@@ -39,20 +45,26 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private FullnameMapping fullnameMapping;
 	private MonitoredSubredditMapping monitoredSubredditMapping;
 	private PersonMapping personMapping;
+	private HandledModActionMapping handledModActionMapping;
 	private BanHistoryMapping banHistoryMapping;
 	private ResponseMapping responseMapping;
 	private SubscribedHashtagMapping subscribedHashtagMapping;
 	private SubredditModqueueProgressMapping subredditModqueueProgressMapping;
 	private SubredditPropagateStatusMapping subredditPropagateStatusMapping;
+	private UnbanHistoryMapping unbanHistoryMapping;
+	private HandledAtTimestampMapping handledAtTimestampMapping;
 	
 	private SchemaValidator fullnameValidator;
 	private SchemaValidator monitoredSubredditValidator;
 	private SchemaValidator personValidator;
+	private SchemaValidator handledModActionValidator;
 	private SchemaValidator banHistoryValidator;
 	private SchemaValidator responseValidator;
 	private SchemaValidator subscribedHashtagValidator;
 	private SchemaValidator subredditModqueueProgressValidator;
 	private SchemaValidator subredditPropagateStatusValidator;
+	private SchemaValidator unbanHistoryValidator;
+	private SchemaValidator handledAtTimestampValidator;
 	
 	/**
 	 * Connects to the specified database. If there is an active connection
@@ -78,20 +90,26 @@ public class USLDatabase extends Database implements MappingDatabase {
 		fullnameMapping = new MysqlFullnameMapping(this, connection);
 		monitoredSubredditMapping = new MysqlMonitoredSubredditMapping(this, connection);
 		personMapping = new MysqlPersonMapping(this, connection);
+		handledModActionMapping = new MysqlHandledModActionMapping(this, connection);
 		banHistoryMapping = new MysqlBanHistoryMapping(this, connection);
 		responseMapping = new MysqlResponseMapping(this, connection);
 		subscribedHashtagMapping = new MysqlSubscribedHashtagMapping(this, connection);
 		subredditModqueueProgressMapping = new MysqlSubredditModqueueProgressMapping(this, connection);
 		subredditPropagateStatusMapping = new MysqlSubredditPropagateStatusMapping(this, connection);
+		unbanHistoryMapping = new MysqlUnbanHistoryMapping(this, connection);
+		handledAtTimestampMapping = new MysqlHandledAtTimestampMapping(this, connection);
 		
 		fullnameValidator = (SchemaValidator) fullnameMapping;
 		monitoredSubredditValidator = (SchemaValidator) monitoredSubredditMapping;
 		personValidator = (SchemaValidator) personMapping;
+		handledModActionValidator = (SchemaValidator) handledModActionMapping;
 		banHistoryValidator = (SchemaValidator) banHistoryMapping;
 		responseValidator = (SchemaValidator) responseMapping;
 		subscribedHashtagValidator = (SchemaValidator) subscribedHashtagMapping;
 		subredditModqueueProgressValidator = (SchemaValidator) subredditModqueueProgressMapping;
 		subredditPropagateStatusValidator = (SchemaValidator) subredditPropagateStatusMapping;
+		unbanHistoryValidator = (SchemaValidator) unbanHistoryMapping;
+		handledAtTimestampValidator = (SchemaValidator) handledAtTimestampMapping;
 	}
 
 	/**
@@ -108,20 +126,26 @@ public class USLDatabase extends Database implements MappingDatabase {
 		fullnameMapping = null;
 		monitoredSubredditMapping = null;
 		personMapping = null;
+		handledModActionMapping = null;
 		banHistoryMapping = null;
 		responseMapping = null;
 		subscribedHashtagMapping = null;
 		subredditModqueueProgressMapping = null;
 		subredditPropagateStatusMapping = null;
+		unbanHistoryMapping = null;
+		handledAtTimestampMapping = null;
 		
 		fullnameValidator = null;
 		monitoredSubredditValidator = null;
 		personValidator = null;
+		handledModActionValidator = null;
 		banHistoryValidator = null;
 		responseValidator = null;
 		subscribedHashtagValidator = null;
 		subredditModqueueProgressValidator = null;
 		subredditPropagateStatusValidator = null;
+		unbanHistoryValidator = null;
+		handledAtTimestampValidator = null;
 	}
 
 
@@ -132,11 +156,14 @@ public class USLDatabase extends Database implements MappingDatabase {
 	 */
 	public void purgeAll() {
 		/* REVERSE ORDER of validateTableState */
+		handledAtTimestampValidator.purgeSchema();
+		unbanHistoryValidator.purgeSchema();
 		subredditPropagateStatusValidator.purgeSchema();
 		subredditModqueueProgressValidator.purgeSchema();
 		subscribedHashtagValidator.purgeSchema();
 		responseValidator.purgeSchema();
 		banHistoryValidator.purgeSchema();
+		handledModActionValidator.purgeSchema();
 		personValidator.purgeSchema();
 		monitoredSubredditValidator.purgeSchema();
 		fullnameValidator.purgeSchema();
@@ -154,11 +181,14 @@ public class USLDatabase extends Database implements MappingDatabase {
 		fullnameValidator.validateSchema();
 		monitoredSubredditValidator.validateSchema();
 		personValidator.validateSchema();
+		handledModActionValidator.validateSchema();
 		banHistoryValidator.validateSchema();
 		responseValidator.validateSchema();
 		subscribedHashtagValidator.validateSchema();
 		subredditModqueueProgressValidator.validateSchema();
 		subredditPropagateStatusValidator.validateSchema();
+		unbanHistoryValidator.validateSchema();
+		handledAtTimestampValidator.validateSchema();
 	}
 	
 	@Override
@@ -174,6 +204,11 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public PersonMapping getPersonMapping() {
 		return personMapping;
+	}
+	
+	@Override
+	public HandledModActionMapping getHandledModActionMapping() {
+		return handledModActionMapping;
 	}
 	
 	@Override
@@ -199,6 +234,16 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public SubredditPropagateStatusMapping getSubredditPropagateStatusMapping() {
 		return subredditPropagateStatusMapping;
+	}
+	
+	@Override
+	public UnbanHistoryMapping getUnbanHistoryMapping() {
+		return unbanHistoryMapping;
+	}
+	
+	@Override
+	public HandledAtTimestampMapping getHandledAtTimestampMapping() {
+		return handledAtTimestampMapping;
 	}
 	
 	/**

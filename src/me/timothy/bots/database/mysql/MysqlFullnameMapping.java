@@ -6,8 +6,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -81,26 +79,6 @@ public class MysqlFullnameMapping extends MysqlObjectMapping<Fullname> implement
 		}
 	}
 
-	@Override
-	public List<Fullname> fetchAll() {
-		try {
-			PreparedStatement statement = connection.prepareStatement("SELECT * FROM fullnames");
-			
-			List<Fullname> fullnames = new ArrayList<>();
-			ResultSet results = statement.executeQuery();
-			while(results.next()) {
-				fullnames.add(fetchFromSet(results));
-			}
-			results.close();
-			statement.close();
-			
-			return fullnames;
-		} catch (SQLException sqlE) {
-			logger.throwing(sqlE);
-			throw new RuntimeException(sqlE);
-		}
-	}
-
 	/**
 	 * Fetches a fullname from the result set
 	 * 
@@ -108,6 +86,7 @@ public class MysqlFullnameMapping extends MysqlObjectMapping<Fullname> implement
 	 * @return the fullname in the current row of the set
 	 * @throws SQLException if one occurs
 	 */
+	@Override
 	protected Fullname fetchFromSet(ResultSet set) throws SQLException {
 		return new Fullname(set.getInt("id"), set.getString("fullname"));
 	}

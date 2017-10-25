@@ -6,8 +6,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -16,7 +14,7 @@ import me.timothy.bots.USLDatabase;
 import me.timothy.bots.database.ResponseMapping;
 import me.timothy.bots.models.Response;
 
-public class MysqlResponseMapping extends MysqlObjectMapping<Response> implements ResponseMapping {
+public class MysqlResponseMapping extends MysqlObjectWithIDMapping<Response> implements ResponseMapping {
 	private static final Logger logger = LogManager.getLogger();
 	
 	public MysqlResponseMapping(USLDatabase database, Connection connection) {
@@ -78,43 +76,15 @@ public class MysqlResponseMapping extends MysqlObjectMapping<Response> implement
 
 	@Override
 	public Response fetchByName(String name) {
-		try {
-			PreparedStatement statement = connection.prepareStatement("SELECT * FROM responses WHERE name=?");
-			statement.setString(1, name);
-			
-			ResultSet results = statement.executeQuery();
-			Response response = null;
-			if(results.next()) {
-				response = fetchFromSet(results);
-			}
-			results.close();
-			
-			statement.close();
-			return response;
-		}catch(SQLException e) {
-			logger.throwing(e);
-			throw new RuntimeException(e);
-		}
-	}
+		return fetchByAction("SELECT * FROM " + table + " WHERE name=? LIMIT 1", new PreparedStatementSetVars() {
 
-	@Override
-	public List<Response> fetchAll() {
-		try {
-			PreparedStatement statement = connection.prepareStatement("SELECT * FROM responses");
-			
-			ResultSet results = statement.executeQuery();
-			List<Response> responses = new ArrayList<>();
-			while(results.next()) {
-				responses.add(fetchFromSet(results));
+			@Override
+			public void setVars(PreparedStatement statement) throws SQLException {
+				int counter = 1;
+				statement.setString(counter++, name);
 			}
-			results.close();
 			
-			statement.close();
-			return responses;
-		}catch(SQLException e) {
-			logger.throwing(e);
-			throw new RuntimeException(e);
-		}
+		}, fetchFromSetFunction());
 	}
 
 	/**
@@ -123,6 +93,7 @@ public class MysqlResponseMapping extends MysqlObjectMapping<Response> implement
 	 * @return the response in the current row
 	 * @throws SQLException if one occurs
 	 */
+	@Override
 	protected Response fetchFromSet(ResultSet results) throws SQLException {
 		return new Response(results.getInt("id"), results.getString("name"), 
 				results.getString("response_body"), results.getTimestamp("created_at"), 

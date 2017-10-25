@@ -7,8 +7,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -23,7 +21,7 @@ import me.timothy.bots.models.Person;
  * 
  * @author Timothy
  */
-public class MysqlPersonMapping extends MysqlObjectMapping<Person> implements SchemaValidator, PersonMapping {
+public class MysqlPersonMapping extends MysqlObjectWithIDMapping<Person> implements SchemaValidator, PersonMapping {
 	private static final Logger logger = LogManager.getLogger();
 
 	public MysqlPersonMapping(USLDatabase database, Connection connection) {
@@ -81,26 +79,6 @@ public class MysqlPersonMapping extends MysqlObjectMapping<Person> implements Sc
 	}
 
 	@Override
-	public List<Person> fetchAll() {
-		try {
-			PreparedStatement statement = connection.prepareStatement("SELECT * FROM " + table);
-			
-			List<Person> persons = new ArrayList<>();
-			ResultSet results = statement.executeQuery();
-			while(results.next()) {
-				persons.add(fetchFromSet(results));
-			}
-			results.close();
-			statement.close();
-			return persons;
-		} catch (SQLException e) {
-			logger.throwing(e);
-			throw new RuntimeException(e);
-		}
-		
-	}
-
-	@Override
 	public Person fetchOrCreateByUsername(String username) {
 		Person existing = fetchByUsername(username);
 		if(existing != null)
@@ -114,69 +92,28 @@ public class MysqlPersonMapping extends MysqlObjectMapping<Person> implements Sc
 
 	@Override
 	public Person fetchByUsername(String username) {
-		try {
-			PreparedStatement statement = connection.prepareStatement("SELECT * FROM " + table + " WHERE username=?");
-			
-			int counter = 1;
-			statement.setString(counter++, username);
-			
-			ResultSet results = statement.executeQuery();
-			
-			Person person = null;
-			if(results.next()) {
-				person = fetchFromSet(results);
+		return fetchByAction("SELECT * FROM " + table + " WHERE username=? LIMIT 1", new PreparedStatementSetVars() {
+
+			@Override
+			public void setVars(PreparedStatement statement) throws SQLException {
+				int counter = 1;
+				statement.setString(counter++, username);
 			}
-			results.close();
-			statement.close();
-			return person;
-		} catch (SQLException e) {
-			logger.throwing(e);
-			throw new RuntimeException(e);
-		}
+			
+		}, fetchFromSetFunction());
 	}
 
 	@Override
 	public Person fetchByEmail(String email) {
-		try {
-			PreparedStatement statement = connection.prepareStatement("SELECT * FROM " + table + " WHERE email=? LIMIT 1");
+		return fetchByAction("SELECT * FROM " + table + " WHERE email=? LIMIT 1", new PreparedStatementSetVars() {
 
-			int counter = 1;
-			statement.setString(counter++, email);
-
-			ResultSet results = statement.executeQuery();
-			Person person = null;
-			if(results.next()) {
-				person = fetchFromSet(results);
+			@Override
+			public void setVars(PreparedStatement statement) throws SQLException {
+				int counter = 1;
+				statement.setString(counter++, email);
 			}
-			results.close();
-			statement.close();
-			return person;
-		} catch (SQLException e) {
-			logger.throwing(e);
-			throw new RuntimeException(e);
-		}
-	}
-	
-	@Override
-	public Person fetchByID(int id) {
-		try {
-			PreparedStatement statement = connection.prepareStatement("SELECT * FROM " + table + " WHERE id=? LIMIT 1");
-
-			int counter = 1;
-			statement.setInt(counter++, id);
-
-			ResultSet results = statement.executeQuery();
-			Person person = null;
-			if(results.next()) {
-				person = fetchFromSet(results);
-			}
-			results.close();
-			statement.close();
-			return person;
-		} catch (SQLException e) {
-			logger.throwing(e);
-			throw new RuntimeException(e);
-		}
+			
+		}, fetchFromSetFunction());
 	}
 	
 	/**
@@ -185,6 +122,7 @@ public class MysqlPersonMapping extends MysqlObjectMapping<Person> implements Sc
 	 * @param set the set
 	 * @return the person in the current row
 	 */
+	@Override
 	protected Person fetchFromSet(ResultSet set) throws SQLException {
 		return new Person(set.getInt("id"), set.getString("username"), set.getString("password_hash"),
 				set.getString("email"), set.getInt("auth"), set.getTimestamp("created_at"),

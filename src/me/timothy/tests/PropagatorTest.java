@@ -10,12 +10,13 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import me.timothy.bots.USLBanHistoryPropagator;
+import me.timothy.bots.USLPropagator;
 import me.timothy.bots.USLBotDriver;
 import me.timothy.bots.USLDatabase;
 import me.timothy.bots.USLFileConfiguration;
-import me.timothy.bots.memory.BanHistoryPropagateResult;
+import me.timothy.bots.memory.PropagateResult;
 import me.timothy.bots.models.BanHistory;
+import me.timothy.bots.models.HandledModAction;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
 import me.timothy.bots.models.Response;
@@ -30,14 +31,14 @@ import me.timothy.tests.database.mysql.MysqlTestUtils;
 public class PropagatorTest {
 	private USLDatabase database;
 	private USLFileConfiguration config;
-	private USLBanHistoryPropagator propagator;
+	private USLPropagator propagator;
 	
 	@Before
 	public void setUp() throws NullPointerException, IOException {
 		config = new USLFileConfiguration(Paths.get("tests"));
 		config.load();
 		database = MysqlTestUtils.getDatabase(config.getProperties().get("database"));
-		propagator = new USLBanHistoryPropagator(database, config);
+		propagator = new USLPropagator(database, config);
 		
 		MysqlTestUtils.clearDatabase(database);
 	}
@@ -68,15 +69,17 @@ public class PropagatorTest {
 				new Timestamp(System.currentTimeMillis()), null);
 		database.getSubscribedHashtagMapping().save(hashtag);
 		
-		BanHistory paulBanningJohn = new BanHistory(-1, paulsSub.id, paul.id, john.id, "ModAction_ID1", "#rekt", "permanent", 
-				new Timestamp(System.currentTimeMillis()));
+		HandledModAction hma = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(System.currentTimeMillis()));
+		database.getHandledModActionMapping().save(hma);
+		
+		BanHistory paulBanningJohn = new BanHistory(-1, paul.id, john.id, hma.id, "#rekt", "permanent");
 		database.getBanHistoryMapping().save(paulBanningJohn);
 		
 		
-		BanHistoryPropagateResult result = propagator.propagateBan(paulsSub, paulBanningJohn);
+		PropagateResult result = propagator.propagateBan(paulsSub, hma, paulBanningJohn);
 		assertNotNull(result);
 		assertEquals(paulsSub, result.subreddit);
-		assertEquals(paulBanningJohn, result.banHistory);
+		assertEquals(hma, result.handledModAction);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
@@ -103,18 +106,22 @@ public class PropagatorTest {
 		SubscribedHashtag hashtag2 = new SubscribedHashtag(-1, ericsSub.id, "#rekt", 
 				new Timestamp(System.currentTimeMillis()), null);
 		database.getSubscribedHashtagMapping().save(hashtag2);
+
+		HandledModAction hma = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(System.currentTimeMillis()));
+		database.getHandledModActionMapping().save(hma);
 		
-		BanHistory paulBanningJohn = new BanHistory(-1, paulsSub.id, paul.id, john.id, "ModAction_ID1", "rekt", "30 days", 
-				new Timestamp(System.currentTimeMillis()));
+		BanHistory paulBanningJohn = new BanHistory(-1, paul.id, john.id, hma.id, "#rekt", "30 days");
 		database.getBanHistoryMapping().save(paulBanningJohn);
 		
-		BanHistoryPropagateResult result = propagator.propagateBan(paulsSub, paulBanningJohn);
+		database.getBanHistoryMapping().save(paulBanningJohn);
+		
+		PropagateResult result = propagator.propagateBan(paulsSub, hma, paulBanningJohn);
 		assertNotNull(result);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
 		
-		result = propagator.propagateBan(ericsSub, paulBanningJohn);
+		result = propagator.propagateBan(ericsSub, hma, paulBanningJohn);
 		assertNotNull(result);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
@@ -153,19 +160,21 @@ public class PropagatorTest {
 		SubscribedHashtag hashtag2 = new SubscribedHashtag(-1, secondSub.id, "#rekt", 
 				new Timestamp(System.currentTimeMillis()), null);
 		database.getSubscribedHashtagMapping().save(hashtag2);
+
+		HandledModAction hma = new HandledModAction(-1, modsSub.id, "ModAction_ID1", new Timestamp(System.currentTimeMillis()));
+		database.getHandledModActionMapping().save(hma);
 		
-		BanHistory botsBan = new BanHistory(-1, modsSub.id, botPerson.id, banPerson.id, "ModAction_ID1", "#rekt", "permanent", 
-				new Timestamp(System.currentTimeMillis()));
+		BanHistory botsBan = new BanHistory(-1, botPerson.id, banPerson.id, hma.id, "#rekt", "permanent");
 		database.getBanHistoryMapping().save(botsBan);
 		
 
-		BanHistoryPropagateResult result = propagator.propagateBan(modsSub, botsBan);
+		PropagateResult result = propagator.propagateBan(modsSub, hma, botsBan);
 		assertNotNull(result);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
 		
-		result = propagator.propagateBan(secondSub, botsBan);
+		result = propagator.propagateBan(secondSub, hma, botsBan);
 		assertNotNull(result);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
@@ -199,9 +208,11 @@ public class PropagatorTest {
 				new Timestamp(System.currentTimeMillis()), null);
 		database.getSubscribedHashtagMapping().save(hashtag);
 		
+
+		HandledModAction hma = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(System.currentTimeMillis()));
+		database.getHandledModActionMapping().save(hma);
 		
-		BanHistory paulBansJohn = new BanHistory(-1, paulsSub.id, paul.id, john.id, "ModAction_ID1", 
-				"#rekt", "permanent", new Timestamp(System.currentTimeMillis()));
+		BanHistory paulBansJohn = new BanHistory(-1, paul.id, john.id, hma.id, "#rekt", "permanent");
 		database.getBanHistoryMapping().save(paulBansJohn);
 		
 		database.getResponseMapping().save(new Response(-1, "propagated_ban_message", "1 <original mod>, <original description>, <original subreddit>, <new subreddit>, <triggering tags>", new Timestamp(System.currentTimeMillis()), new Timestamp(System.currentTimeMillis())));
@@ -211,10 +222,10 @@ public class PropagatorTest {
 		
 		final String expBanMessage = "1 paul, #rekt, paulssub, ericssub, #rekt";
 		final String expBanNote = "2 paul, #rekt, paulssub, ericssub, #rekt";
-		final String expModmailTitle = "3 paul, #rekt, paulssub, " + USLBotDriver.timeToPretty(paulBansJohn.occurredAt.getTime()) + ", ModAction_ID1, john, #rekt";
-		final String expModmailBody = "4 paul, #rekt, paulssub, " + USLBotDriver.timeToPretty(paulBansJohn.occurredAt.getTime()) + ", ModAction_ID1, john, #rekt";
+		final String expModmailTitle = "3 paul, #rekt, paulssub, " + USLBotDriver.timeToPretty(hma.occurredAt.getTime()) + ", ModAction_ID1, john, #rekt";
+		final String expModmailBody = "4 paul, #rekt, paulssub, " + USLBotDriver.timeToPretty(hma.occurredAt.getTime()) + ", ModAction_ID1, john, #rekt";
 		
-		BanHistoryPropagateResult result = propagator.propagateBan(ericsSub, paulBansJohn);
+		PropagateResult result = propagator.propagateBan(ericsSub, hma, paulBansJohn);
 		assertNotNull(result);
 		assertEquals(1, result.bans.size());
 		assertEquals(expBanMessage, result.bans.get(0).banMessage);
@@ -265,16 +276,19 @@ public class PropagatorTest {
 		SubscribedHashtag ericsHashtag = new SubscribedHashtag(-1, ericsSub.id, "#onionhater", new Timestamp(System.currentTimeMillis()), null);
 		database.getSubscribedHashtagMapping().save(ericsHashtag);
 		
-		BanHistory paulBansAdam = new BanHistory(-1, paulsSub.id, paul.id, adam.id, "ModAction_ID1", "probable #onionhater", "permanent", 
-				new Timestamp(System.currentTimeMillis()));
+
+		HandledModAction hma = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(System.currentTimeMillis()));
+		database.getHandledModActionMapping().save(hma);
+		
+		BanHistory paulBansAdam = new BanHistory(-1, paul.id, adam.id, hma.id, "probable #onionhater", "permanent");
 		database.getBanHistoryMapping().save(paulBansAdam);
 		
-		BanHistoryPropagateResult result = propagator.propagateBan(johnsSub, paulBansAdam);
+		PropagateResult result = propagator.propagateBan(johnsSub, hma, paulBansAdam);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
 		
-		result = propagator.propagateBan(ericsSub, paulBansAdam);
+		result = propagator.propagateBan(ericsSub, hma, paulBansAdam);
 		assertEquals(1, result.bans.size());
 		assertEquals(ericsSub, result.bans.get(0).subreddit);
 		assertEquals(1, result.modmailPMs.size());
@@ -307,20 +321,27 @@ public class PropagatorTest {
 		SubscribedHashtag johnTag2 = new SubscribedHashtag(-1, johnsSub.id, "#onionlover", new Timestamp(System.currentTimeMillis()), null);
 		database.getSubscribedHashtagMapping().save(johnTag2);
 		
-		BanHistory paulBansEric = new BanHistory(-1, paulsSub.id, paul.id, eric.id, "ModAction_ID1", "proven #onionlover", "permanent", new Timestamp(System.currentTimeMillis()));
+
+		HandledModAction hma = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(System.currentTimeMillis()));
+		database.getHandledModActionMapping().save(hma);
+		
+		BanHistory paulBansEric = new BanHistory(-1, paul.id, eric.id, hma.id, "proven #onionlover", "permanent");
 		database.getBanHistoryMapping().save(paulBansEric);
 		
-		BanHistoryPropagateResult result = propagator.propagateBan(johnsSub, paulBansEric);
+		PropagateResult result = propagator.propagateBan(johnsSub, hma, paulBansEric);
 		assertEquals(1, result.bans.size());
 		assertEquals(johnsSub, result.bans.get(0).subreddit);
 		assertEquals(1, result.modmailPMs.size());
 		assertEquals(johnsSub, result.modmailPMs.get(0).subreddit);
 		assertTrue(result.userPMs.isEmpty());
+
+		HandledModAction hma2 = new HandledModAction(-1, paulsSub.id, "ModAction_ID2", new Timestamp(System.currentTimeMillis()));
+		database.getHandledModActionMapping().save(hma);
 		
-		BanHistory paulBansAdam = new BanHistory(-1, paulsSub.id, paul.id, adam.id, "ModAction_ID2", "known #onionhater", "permanent", new Timestamp(System.currentTimeMillis()));
+		BanHistory paulBansAdam = new BanHistory(-1, paul.id, adam.id, hma2.id, "known #onionhater", "permanent");
 		database.getBanHistoryMapping().save(paulBansAdam);
 		
-		result = propagator.propagateBan(johnsSub, paulBansAdam);
+		result = propagator.propagateBan(johnsSub, hma2, paulBansAdam);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
@@ -345,12 +366,14 @@ public class PropagatorTest {
 		
 		SubscribedHashtag johnTag = new SubscribedHashtag(-1, johnsSub.id, "#onionlover", new Timestamp(System.currentTimeMillis()), null);
 		database.getSubscribedHashtagMapping().save(johnTag);
+
+		HandledModAction hma = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(System.currentTimeMillis()));
+		database.getHandledModActionMapping().save(hma);
 		
-		BanHistory paulBansEric = new BanHistory(-1, paulsSub.id, paul.id, eric.id, "ModAction_ID1", "likely #onionlover", "permanent", 
-				new Timestamp(System.currentTimeMillis()));
+		BanHistory paulBansEric = new BanHistory(-1, paul.id, eric.id, hma.id, "likely #onionlover", "permanent");
 		database.getBanHistoryMapping().save(paulBansEric);
 		
-		BanHistoryPropagateResult result = propagator.propagateBan(johnsSub, paulBansEric);
+		PropagateResult result = propagator.propagateBan(johnsSub, hma, paulBansEric);
 		assertEquals(1, result.bans.size());
 		assertEquals(johnsSub, result.bans.get(0).subreddit);
 		assertEquals(eric, result.bans.get(0).person);
@@ -377,12 +400,14 @@ public class PropagatorTest {
 		
 		SubscribedHashtag johnTag = new SubscribedHashtag(-1, johnsSub.id, "#onionlover", new Timestamp(System.currentTimeMillis()), null);
 		database.getSubscribedHashtagMapping().save(johnTag);
+
+		HandledModAction hma = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(System.currentTimeMillis()));
+		database.getHandledModActionMapping().save(hma);
 		
-		BanHistory paulBansEric = new BanHistory(-1, paulsSub.id, paul.id, eric.id, "ModAction_ID1", "likely #onionlover", "permanent", 
-				new Timestamp(System.currentTimeMillis()));
+		BanHistory paulBansEric = new BanHistory(-1, paul.id, eric.id, hma.id, "likely #onionlover", "permanent");
 		database.getBanHistoryMapping().save(paulBansEric);
 		
-		BanHistoryPropagateResult result = propagator.propagateBan(johnsSub, paulBansEric);
+		PropagateResult result = propagator.propagateBan(johnsSub, hma, paulBansEric);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
@@ -407,12 +432,14 @@ public class PropagatorTest {
 		
 		SubscribedHashtag johnTag = new SubscribedHashtag(-1, johnsSub.id, "#onionlover", new Timestamp(System.currentTimeMillis()), null);
 		database.getSubscribedHashtagMapping().save(johnTag);
+
+		HandledModAction hma = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(System.currentTimeMillis()));
+		database.getHandledModActionMapping().save(hma);
 		
-		BanHistory paulBansEric = new BanHistory(-1, paulsSub.id, paul.id, eric.id, "ModAction_ID1", "likely #onionlover", "permanent", 
-				new Timestamp(System.currentTimeMillis()));
+		BanHistory paulBansEric = new BanHistory(-1, paul.id, eric.id, hma.id, "likely #onionlover", "permanent");
 		database.getBanHistoryMapping().save(paulBansEric);
 		
-		BanHistoryPropagateResult result = propagator.propagateBan(johnsSub, paulBansEric);
+		PropagateResult result = propagator.propagateBan(johnsSub, hma, paulBansEric);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());

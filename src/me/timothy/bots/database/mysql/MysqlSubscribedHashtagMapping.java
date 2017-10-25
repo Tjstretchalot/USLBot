@@ -6,7 +6,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
@@ -16,7 +15,7 @@ import me.timothy.bots.USLDatabase;
 import me.timothy.bots.database.SubscribedHashtagMapping;
 import me.timothy.bots.models.SubscribedHashtag;
 
-public class MysqlSubscribedHashtagMapping extends MysqlObjectMapping<SubscribedHashtag> implements SubscribedHashtagMapping {
+public class MysqlSubscribedHashtagMapping extends MysqlObjectWithIDMapping<SubscribedHashtag> implements SubscribedHashtagMapping {
 	private static final Logger logger = LogManager.getLogger();
 
 	public MysqlSubscribedHashtagMapping(USLDatabase database, Connection connection) {
@@ -77,61 +76,21 @@ public class MysqlSubscribedHashtagMapping extends MysqlObjectMapping<Subscribed
 	}
 
 	@Override
-	public List<SubscribedHashtag> fetchAll() {
-		try {
-			PreparedStatement statement = connection.prepareStatement("SELECT * FROM " + table);
-
-			List<SubscribedHashtag> hashtags = executeQueryAndFetchAll(statement);
-			
-			statement.close();
-			return hashtags;
-		}catch(SQLException e) {
-			logger.throwing(e);
-			throw new RuntimeException(e);
-		}
-	}
-
-	@Override
 	public List<SubscribedHashtag> fetchForSubreddit(int monitoredSubredditID, boolean deleted) {
-		try {
-			StringBuilder sql = new StringBuilder();
-			sql.append("SELECT * FROM ").append(table).append(" WHERE monitored_subreddit_id=?");
-			if(!deleted) {
-				sql.append(" AND deleted_at IS NULL");
+		StringBuilder sql = new StringBuilder();
+		sql.append("SELECT * FROM ").append(table).append(" WHERE monitored_subreddit_id=?");
+		if(!deleted) {
+			sql.append(" AND deleted_at IS NULL");
+		}
+		return fetchByAction(sql.toString(), new PreparedStatementSetVars() {
+
+			@Override
+			public void setVars(PreparedStatement statement) throws SQLException {
+				int counter = 1;
+				statement.setInt(counter++, monitoredSubredditID);
 			}
-			PreparedStatement statement = connection.prepareStatement(sql.toString());
 			
-			int counter = 1;
-			statement.setInt(counter++, monitoredSubredditID);
-			
-			List<SubscribedHashtag> hashtags = executeQueryAndFetchAll(statement);
-			
-			statement.close();
-			return hashtags;
-		}catch(SQLException e) {
-			logger.throwing(e);
-			throw new RuntimeException(e);
-		}
-	}
-	
-	/**
-	 * Executes the specified prepared statement as a query and returns the results
-	 * using fetchFromSet
-	 * 
-	 * @param statement the statement
-	 * @return the results in memory
-	 * @throws SQLException if one occurs
-	 */
-	protected List<SubscribedHashtag> executeQueryAndFetchAll(PreparedStatement statement) throws SQLException {
-		ResultSet results = statement.executeQuery();
-		
-		List<SubscribedHashtag> hashtags = new ArrayList<>();
-		while(results.next()) { 
-			hashtags.add(fetchFromSet(results));
-		}
-		results.close();
-		
-		return hashtags;
+		}, fetchListFromSetFunction());
 	}
 	
 	/**
@@ -141,6 +100,7 @@ public class MysqlSubscribedHashtagMapping extends MysqlObjectMapping<Subscribed
 	 * @return the subscribedhashtag in the current row
 	 * @throws SQLException if one occurs
 	 */
+	@Override
 	protected SubscribedHashtag fetchFromSet(ResultSet set) throws SQLException {
 		return new SubscribedHashtag(set.getInt("id"), set.getInt("monitored_subreddit_id"), set.getString("hashtag"),
 				set.getTimestamp("created_at"), set.getTimestamp("deleted_at"));

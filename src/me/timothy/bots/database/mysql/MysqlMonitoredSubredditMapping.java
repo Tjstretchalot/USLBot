@@ -6,8 +6,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -17,7 +15,7 @@ import me.timothy.bots.database.MonitoredSubredditMapping;
 import me.timothy.bots.database.SchemaValidator;
 import me.timothy.bots.models.MonitoredSubreddit;
 
-public class MysqlMonitoredSubredditMapping extends MysqlObjectMapping<MonitoredSubreddit> 
+public class MysqlMonitoredSubredditMapping extends MysqlObjectWithIDMapping<MonitoredSubreddit> 
 	implements MonitoredSubredditMapping, SchemaValidator {
 	private static Logger logger = LogManager.getLogger();
 
@@ -71,26 +69,6 @@ public class MysqlMonitoredSubredditMapping extends MysqlObjectMapping<Monitored
 	}
 
 	@Override
-	public List<MonitoredSubreddit> fetchAll() {
-		try {
-			PreparedStatement statement = connection.prepareStatement("SELECT * FROM " + table);
-			
-			List<MonitoredSubreddit> monitoredSubreddits = new ArrayList<>();
-			ResultSet results = statement.executeQuery();
-			while(results.next()) {
-				monitoredSubreddits.add(fetchFromSet(results));
-			}
-			results.close();
-			statement.close();
-			
-			return monitoredSubreddits;
-		} catch (SQLException e) {
-			logger.throwing(e);
-			throw new RuntimeException(e);
-		}
-	}
-
-	@Override
 	public String fetchAllAndConcatenate() {
 		try {
 			PreparedStatement statement = connection.prepareStatement("SELECT subreddit FROM " + table);
@@ -116,31 +94,6 @@ public class MysqlMonitoredSubredditMapping extends MysqlObjectMapping<Monitored
 			throw new RuntimeException(e);
 		}
 	}
-	
-	
-
-	@Override
-	public MonitoredSubreddit fetchByID(int id) {
-		try {
-			PreparedStatement statement = connection.prepareStatement("SELECT * FROM " + table + " WHERE id=?");
-			
-			int counter = 1;
-			statement.setInt(counter++, id);
-			
-			MonitoredSubreddit sub = null;
-			ResultSet results = statement.executeQuery();
-			if(results.next()) {
-				sub = fetchFromSet(results);
-			}
-			results.close();
-			statement.close();
-			
-			return sub;
-		} catch (SQLException e) {
-			logger.throwing(e);
-			throw new RuntimeException(e);
-		}
-	}
 
 	/**
 	 * Fetches a monitored subreddit from the result set
@@ -149,6 +102,7 @@ public class MysqlMonitoredSubredditMapping extends MysqlObjectMapping<Monitored
 	 * @return the monitored subreddit in the current row of the set
 	 * @throws SQLException if one occurs
 	 */
+	@Override
 	protected MonitoredSubreddit fetchFromSet(ResultSet set) throws SQLException {
 		return new MonitoredSubreddit(set.getInt("id"), set.getString("subreddit"), set.getBoolean("silent"),
 				set.getBoolean("read_only"), set.getBoolean("write_only"));

@@ -3,11 +3,15 @@ package me.timothy.bots.database.mysql;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -27,6 +31,89 @@ import me.timothy.bots.database.SchemaValidator;
  * @param <A> What this mapping maps
  */
 public abstract class MysqlObjectMapping<A> implements ObjectMapping<A>, SchemaValidator {
+	/** Effectively acting as a function definition */
+	protected interface PreparedStatementSetVars {
+		/**
+		 * Call statement.setInt like functions for the statement that this
+		 * is paired with.
+		 * 
+		 * @param statement the statement
+		 * @throws SQLException if one occurs
+		 */
+		public void setVars(PreparedStatement statement) throws SQLException;
+	}
+	
+	/** Maps Types to values **/
+	protected class MysqlTypeValueTuple {
+		/** mysql type */
+		public final int type;
+		/** mysql value */
+		public final Object value;
+		
+		/**
+		 * Create a new mysql type/value tuple
+		 * @param type the type (from Types)
+		 * @param value the value
+		 */
+		public MysqlTypeValueTuple(int type, Object value) {
+			this.type = type;
+			this.value = value;
+		}
+	}
+	
+	/** This class uses a ton of casting to reduce boilerplate. Down-side is no compiler-type-checks  */
+	protected class PreparedStatementSetVarsUnsafe implements PreparedStatementSetVars {
+		protected MysqlTypeValueTuple[] typeValueTuples;
+		
+		/**
+		 * Compiler thinks this can polute the heap. Seems like that would require a lot
+		 * of effort since this class is protected and no generics should ever go in here
+		 * 
+		 * @param typeValueTuples the tuples
+		 */
+		@SafeVarargs
+		public PreparedStatementSetVarsUnsafe(MysqlTypeValueTuple... typeValueTuples) {
+			this.typeValueTuples = typeValueTuples;
+		}
+		
+		@Override
+		public void setVars(PreparedStatement statement) throws SQLException {
+			int counter = 1;
+			for(MysqlTypeValueTuple tuple : typeValueTuples) {
+				switch(tuple.type) { 
+				case Types.INTEGER:
+					statement.setInt(counter++, (int)tuple.value);
+					break;
+				case Types.BIT:
+					statement.setBoolean(counter++, (boolean)tuple.value);
+					break;
+				case Types.VARCHAR:
+				case Types.LONGVARCHAR:
+					statement.setString(counter++, (String)tuple.value);
+					break;
+				case Types.TIMESTAMP:
+					statement.setTimestamp(counter++, (Timestamp)tuple.value);
+					break;
+				default:
+					throw new IllegalArgumentException("Unknown type " + tuple.type + ", you probably just need to add it to this function.");
+				}
+			}
+		}
+	}
+	/** Effectively acting as a function definition */
+	protected interface PreparedStatementFetchResult<B> {
+		/**
+		 * Call fetchFromSet like functions for the statement that this
+		 * is paired with. Should not close the set, and should skip
+		 * one row.
+		 * 
+		 * @param set the set to fetch from
+		 * @return the B the set described 
+		 * @throws SQLException if one occurs
+		 */
+		public B fetchResult(ResultSet set) throws SQLException;
+	}
+	
 	private static final Logger logger = LogManager.getLogger();
 	
 	/**
@@ -61,6 +148,111 @@ public abstract class MysqlObjectMapping<A> implements ObjectMapping<A>, SchemaV
 		this.table = table;
 		this.columns = columns;
 	}
+	
+	@Override
+	public List<A> fetchAll() {
+		return fetchByAction("SELECT * FROM " + table, null, fetchListFromSetFunction());
+	}
+	
+	/**
+	 * Creates a preparedstatement statement, then calls setVars, then executes the prepared statement
+	 * as a query, caches the result of the fetchFunc on that result, then closes the set and prepared
+	 * statement and returns the cached result.
+	 * 
+	 * @param statement the statement
+	 * @param setVars the setvars function or null
+	 * @param fetchFunc the function that fetches the B from the result set 
+	 * @return result from fetchFunc
+	 */
+	protected <B> B fetchByAction(String statement, PreparedStatementSetVars setVars, PreparedStatementFetchResult<B> fetchFunc) {
+		try {
+			PreparedStatement pStatement = connection.prepareStatement(statement);
+			if(setVars != null)
+				setVars.setVars(pStatement);
+			
+			ResultSet set = pStatement.executeQuery();
+			B result = fetchFunc.fetchResult(set);
+			set.close();
+			
+			pStatement.close();
+			return result;
+		}catch(SQLException e) {
+			logger.error("SQLException occurred on MysqlObjectMapping<A>#fetchByAction. statement=" + statement + ", table=" + table);
+			logger.throwing(e);
+			throw new RuntimeException(e);
+		}
+	}
+	
+	/**
+	 * Wrapper around fetchListFromSet so it can be passed to fetchByAction
+	 * 
+	 * @return wrapped fetchListFromSet
+	 */
+	protected PreparedStatementFetchResult<List<A>> fetchListFromSetFunction() {
+		return new PreparedStatementFetchResult<List<A>>() {
+
+			@Override
+			public List<A> fetchResult(ResultSet set) throws SQLException {
+				return fetchListFromSet(set);
+			}
+			
+		};
+	}
+	
+	/**
+	 * Wrapper around fetchFromSet so it can be passed to fetchByAction. Returns
+	 * null if set.next() returns false.
+	 * 
+	 * @return wrapped fetchFromSet
+	 */
+	protected PreparedStatementFetchResult<A> fetchFromSetFunction() {
+		return new PreparedStatementFetchResult<A>() {
+			@Override
+			public A fetchResult(ResultSet set) throws SQLException {
+				if(set.next()) {
+					return fetchFromSet(set);
+				}
+				return null;
+			}
+		};
+	}
+	
+	/**
+	 * Creates ?, ?, ? etc., where there are num
+	 * question marks in the resulting string.
+	 * 
+	 * @param num number of question marks
+	 * @return string with num question marks delimited by commas
+	 */
+	protected String createPlaceholders(int num) {
+		return String.join(", ", Collections.nCopies(num, "?"));
+	}
+	
+	/**
+	 * Fetches every a in the set. Starts with set.next(), so skips the current
+	 * row if the set has already been accessed.
+	 * 
+	 * @param set the set to fetch from
+	 * @return the list of as in the set
+	 * @throws SQLException if one occurs
+	 */
+	protected List<A> fetchListFromSet(ResultSet set) throws SQLException 
+	{
+		List<A> as = new ArrayList<>();
+		while(set.next()) {
+			as.add(fetchFromSet(set));
+		}
+		return as;
+	}
+
+	/**
+	 * Fetches the A in the current row of the set.
+	 * 
+	 * @param set the set to fetch from
+	 * @return the a in the current row
+	 * @throws SQLException if one occurs
+	 */
+	protected abstract A fetchFromSet(ResultSet set) throws SQLException;
 	
 	@Override
 	public void validateSchema() {

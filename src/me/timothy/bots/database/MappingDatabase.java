@@ -10,9 +10,12 @@ public interface MappingDatabase {
 	public FullnameMapping getFullnameMapping();
 	public MonitoredSubredditMapping getMonitoredSubredditMapping();
 	public PersonMapping getPersonMapping();
+	public HandledModActionMapping getHandledModActionMapping();
 	public BanHistoryMapping getBanHistoryMapping();
 	public ResponseMapping getResponseMapping();
 	public SubscribedHashtagMapping getSubscribedHashtagMapping();
 	public SubredditModqueueProgressMapping getSubredditModqueueProgressMapping();
 	public SubredditPropagateStatusMapping getSubredditPropagateStatusMapping();
+	public UnbanHistoryMapping getUnbanHistoryMapping();
+	public HandledAtTimestampMapping getHandledAtTimestampMapping();
 }

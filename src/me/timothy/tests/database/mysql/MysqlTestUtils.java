@@ -94,7 +94,23 @@ public class MysqlTestUtils {
 	 * @param <A> the type of list / object
 	 */
 	public static <A> void assertContains(List<A> list, A obj) {
-		Assert.assertTrue("expected " + list + " to contain " + obj, list.contains(obj));
+		assertContains(null, list, obj);
+	}
+	
+	/**
+	 * Asserts that the {@code list} contains the {@code obj}, as 
+	 * if by {@code assertTrue(list.contains(obj)}, except with a
+	 * prettier error message.
+	 * 
+	 * @param msg custom error message or null
+	 * @param list the list
+	 * @param obj the object
+	 * @param <A> the type of list / object
+	 */
+	public static <A> void assertContains(String msg, List<A> list, A obj) {
+		if(msg == null)
+			msg = "expected " + list + " to contain " + obj;
+		Assert.assertTrue(msg, list.contains(obj));
 	}
 	
 	/**
@@ -107,15 +123,29 @@ public class MysqlTestUtils {
 	 */
 	@SafeVarargs
 	public static <A> void assertListContents(List<A> list, A... objs) {
+		assertListContents(null, list, objs);
+	}
+
+	/**
+	 * Convenience function to verify that a list matches the 
+	 * set of objects. Does not verify order.
+	 * 
+	 * @param msg the message on error
+	 * @param list the list
+	 * @param objs the objects
+	 * @param <A> the type of list / object
+	 */
+	@SafeVarargs
+	public static <A> void assertListContents(String msg, List<A> list, A... objs) {
 		/*
 		 * This function has SafeVarargs since it never inserts anything
 		 * into the list, nor is any casting attempted.
 		 */
 		for(int i = 0; i < objs.length; i++) {
-			assertContains(list, objs[i]);
+			assertContains(msg, list, objs[i]);
 		}
 		
-		Assert.assertEquals(objs.length, list.size());
+		Assert.assertEquals(msg, objs.length, list.size());
 	}
 	
 	/**

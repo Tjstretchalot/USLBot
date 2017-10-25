@@ -40,7 +40,7 @@ public class USLBotMain {
 		
 		logger.debug("File configuration loaded.");
 		
-		Utils.USER_AGENT = config.getProperty("user.appClientID") + ":v10.11.2017 (by /u/Tjstretchalot)";
+		Utils.USER_AGENT = config.getProperty("user.appClientID") + ":v10.24.2017 (by /u/Tjstretchalot)";
 		
 		logger.debug("Connecting to database..");
 		USLDatabase database = new USLDatabase();

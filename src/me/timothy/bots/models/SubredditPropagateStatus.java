@@ -5,19 +5,19 @@ import java.sql.Timestamp;
 /**
  * Keeps track of what banactions have been considered propagating 
  * *to* a subreddit. This is a one-to-one relationship with 
- * MonitoredSubreddits. This is designed to utilize that autoincrement
- * only increases the id counter.
+ * MonitoredSubreddits. 
  * 
- * Thus, if you only work your way upwards from ban history ids and
- * you start at 1, you will receive all of the ban history ids. If you
- * finish at 37, and a new one gets added, its id will be no less than 38.
+ * This database cannot be used without also using the "latest handled"
+ * joining table. This is because modactions must be processed forward
+ * in time, but timestamps are not granular enough on reddit to be 
+ * considered unique.
  * 
  * @author Timothy
  */
 public class SubredditPropagateStatus {
 	public int id;
 	public int monitoredSubredditID;
-	public Integer lastBanHistoryID;
+	public Timestamp latestPropagatedActionTime;
 	public Timestamp updatedAt;
 	
 	/**
@@ -26,13 +26,13 @@ public class SubredditPropagateStatus {
 	 * 
 	 * @param id the unique identifier from the database (-1 if not in database)
 	 * @param monitoredSubredditID the id of the monitored subreddit
-	 * @param lastBanActionID the id of the most recent ban action processed in relation this subreddit or null 
+	 * @param latestPropagatedActionTime the occurred_at of the last propagated handled mod action 
 	 * @param updatedAt when the database entry was last updated (null if not in database)
 	 */
-	public SubredditPropagateStatus(int id, int monitoredSubredditID, Integer lastBanActionID, Timestamp updatedAt) {
+	public SubredditPropagateStatus(int id, int monitoredSubredditID, Timestamp latestPropagatedActionTime, Timestamp updatedAt) {
 		this.id = id;
 		this.monitoredSubredditID = monitoredSubredditID;
-		this.lastBanHistoryID = lastBanActionID;
+		this.latestPropagatedActionTime = latestPropagatedActionTime;
 		this.updatedAt = updatedAt;
 	}
 	
@@ -42,8 +42,7 @@ public class SubredditPropagateStatus {
 	 * @return if this can probably be saved to the database
 	 */
 	public boolean isValid() {
-		return monitoredSubredditID > 0 
-				&& (lastBanHistoryID == null || lastBanHistoryID > 0);
+		return monitoredSubredditID > 0;
 	}
 
 	@Override
@@ -51,7 +50,7 @@ public class SubredditPropagateStatus {
 		final int prime = 31;
 		int result = 1;
 		result = prime * result + id;
-		result = prime * result + ((lastBanHistoryID == null) ? 0 : lastBanHistoryID.hashCode());
+		result = prime * result + ((latestPropagatedActionTime == null) ? 0 : latestPropagatedActionTime.hashCode());
 		result = prime * result + monitoredSubredditID;
 		result = prime * result + ((updatedAt == null) ? 0 : updatedAt.hashCode());
 		return result;
@@ -68,10 +67,10 @@ public class SubredditPropagateStatus {
 		SubredditPropagateStatus other = (SubredditPropagateStatus) obj;
 		if (id != other.id)
 			return false;
-		if (lastBanHistoryID == null) {
-			if (other.lastBanHistoryID != null)
+		if (latestPropagatedActionTime == null) {
+			if (other.latestPropagatedActionTime != null)
 				return false;
-		} else if (!lastBanHistoryID.equals(other.lastBanHistoryID))
+		} else if (!latestPropagatedActionTime.equals(other.latestPropagatedActionTime))
 			return false;
 		if (monitoredSubredditID != other.monitoredSubredditID)
 			return false;
@@ -86,6 +85,6 @@ public class SubredditPropagateStatus {
 	@Override
 	public String toString() {
 		return "SubredditPropagateStatus [id=" + id + ", monitoredSubredditID=" + monitoredSubredditID
-				+ ", lastBanActionID=" + lastBanHistoryID + ", updatedAt=" + updatedAt + "]";
+				+ ", latestPropagatedActionTime=" + latestPropagatedActionTime + ", updatedAt=" + updatedAt + "]";
 	}
 }
