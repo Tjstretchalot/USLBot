@@ -4,3 +4,7 @@ propagated_ban_message - <original mod>, <original description>, <original subre
 propagated_ban_note - <original mod>, <original description>, <original subreddit>, <new subreddit>, <triggering tags>
 propagated_ban_modmail_title - <original mod>, <original description>, <original subreddit>, <original timestamp>, <original id>, <banned user>, <triggering tags>
 propagated_ban_modmail_body - <original mod>, <original description>, <original subreddit>, <original timestamp>, <original id>, <banned user>, <triggering tags>
+
+propagate_ban_to_subreddit_with_history_userpm_title  - same as body
+propagate_ban_to_subreddit_with_history_userpm_body   - <new usl subreddit>, <new usl mod>, <new ban description>, <banned user>, <old subreddit>, <currently banned>, <currently permabanne>,
+                                                        <suppressed>, <triggering tags>, <full history>, <old mod>, <old mod num bans>, <old mod num unbans>

@@ -15,6 +15,7 @@ import me.timothy.bots.USLBotDriver;
 import me.timothy.bots.USLDatabase;
 import me.timothy.bots.USLFileConfiguration;
 import me.timothy.bots.memory.PropagateResult;
+import me.timothy.bots.memory.UserPMInformation;
 import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.HandledModAction;
 import me.timothy.bots.models.MonitoredSubreddit;
@@ -336,7 +337,7 @@ public class PropagatorTest {
 		assertTrue(result.userPMs.isEmpty());
 
 		HandledModAction hma2 = new HandledModAction(-1, paulsSub.id, "ModAction_ID2", new Timestamp(System.currentTimeMillis()));
-		database.getHandledModActionMapping().save(hma);
+		database.getHandledModActionMapping().save(hma2);
 		
 		BanHistory paulBansAdam = new BanHistory(-1, paul.id, adam.id, hma2.id, "known #onionhater", "permanent");
 		database.getBanHistoryMapping().save(paulBansAdam);
@@ -443,6 +444,53 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+	}
+	
+	@Test
+	public void testSendsPMToSubredditModeratorsWithHistory() {
+		initResponses();
+		
+		final long now = System.currentTimeMillis();
+		database.getResponseMapping().save(new Response(-1, "propagate_ban_to_subreddit_with_history_userpm_title", "<old mod> - USL Update on <banned user>", new Timestamp(now), new Timestamp(now)));
+		database.getResponseMapping().save(new Response(-1, "propagate_ban_to_subreddit_with_history_userpm_body", "<new usl subreddit>, <new usl mod>, <new ban description>, <banned user>, <old subreddit>, <currently banned>, <currently permabanned>, <suppressed>, <triggering tags>, <full history>, <old mod>, <old mod num bans>, <old mod num unbans>", new Timestamp(now), new Timestamp(now)));
+		
+		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
+		Person eric = database.getPersonMapping().fetchOrCreateByUsername("eric");
+		Person adam = database.getPersonMapping().fetchOrCreateByUsername("adam");
+		
+		MonitoredSubreddit paulsSub = new MonitoredSubreddit(-1, "paulssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(paulsSub);
+		
+		MonitoredSubreddit adamsSub = new MonitoredSubreddit(-1, "adamssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(adamsSub);
+		
+		SubscribedHashtag paulsHashtag = new SubscribedHashtag(-1, paulsSub.id, "#potato", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(paulsHashtag);
+		
+		HandledModAction paulBansEricHMA = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(now));
+		database.getHandledModActionMapping().save(paulBansEricHMA);
+		
+		BanHistory paulBansEric = new BanHistory(-1, paul.id, eric.id, paulBansEricHMA.id, "no tags here", "permanent");
+		database.getBanHistoryMapping().save(paulBansEric);
+		
+		HandledModAction adamBansEricHMA = new HandledModAction(-1, adamsSub.id, "ModAction_ID2", new Timestamp(now));
+		database.getHandledModActionMapping().save(adamBansEricHMA);
+		
+		BanHistory adamBansEric = new BanHistory(-1, adam.id, eric.id, adamBansEricHMA.id, "#potato", "permanent");
+		database.getBanHistoryMapping().save(adamBansEric);
+		
+		String nowPretty = USLBotDriver.timeToPretty(now);
+		PropagateResult result = propagator.propagateBan(paulsSub, adamBansEricHMA, adamBansEric);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertEquals(1, result.userPMs.size());
+		UserPMInformation userPM = result.userPMs.get(0);
+		assertEquals(paul, userPM.person);
+		assertEquals("paul - USL Update on eric", userPM.title);
+		assertEquals(
+				"adamssub, adam, #potato, eric, paulssub, true, true, true, #potato, - " + nowPretty + " - paul banned eric for permanent - no tags here, paul, 1, 0",
+				userPM.body
+				);
 	}
 
 	@After 

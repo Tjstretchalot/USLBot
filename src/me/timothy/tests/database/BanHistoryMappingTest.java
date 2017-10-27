@@ -141,11 +141,15 @@ public class BanHistoryMappingTest {
 
 		Person john = database.getPersonMapping().fetchOrCreateByUsername("john");
 		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
+		Person eric = database.getPersonMapping().fetchOrCreateByUsername("eric");
 	
 		MonitoredSubreddit johnssub = new MonitoredSubreddit(-1, "johnssub", false, false, false);
 		database.getMonitoredSubredditMapping().save(johnssub);
 		long now = System.currentTimeMillis();
-
+		
+		MonitoredSubreddit ericssub = new MonitoredSubreddit(-1, "ericssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(ericssub);
+		
 		HandledModAction hma = new HandledModAction(-1, johnssub.id, "ModAction_ID", new Timestamp(now - 5000));
 		database.getHandledModActionMapping().save(hma);
 		
@@ -170,5 +174,23 @@ public class BanHistoryMappingTest {
 
 		lFromDB = database.getBanHistoryMapping().fetchBanHistoriesByPersonAndSubreddit(paul.id, johnssub.id);
 		MysqlTestUtils.assertListContents(lFromDB, ban, ban2);
+		
+		HandledModAction hma3 = new HandledModAction(-1, ericssub.id, "ModAction_ID3", new Timestamp(now + 5000));
+		database.getHandledModActionMapping().save(hma3);
+		
+		BanHistory ban3 = new BanHistory(-1, eric.id, paul.id, hma3.id, "annoys john", "permanent");
+		database.getBanHistoryMapping().save(ban3);
+		
+		fromDB = database.getBanHistoryMapping().fetchBanHistoryByPersonAndSubreddit(paul.id, johnssub.id);
+		assertEquals(ban2, fromDB);
+		
+		lFromDB = database.getBanHistoryMapping().fetchBanHistoriesByPersonAndSubreddit(paul.id, johnssub.id);
+		MysqlTestUtils.assertListContents(lFromDB, ban, ban2);
+		
+		fromDB = database.getBanHistoryMapping().fetchBanHistoryByPersonAndSubreddit(paul.id, ericssub.id);
+		assertEquals(ban3, fromDB);
+		
+		lFromDB = database.getBanHistoryMapping().fetchBanHistoriesByPersonAndSubreddit(paul.id, ericssub.id);
+		MysqlTestUtils.assertListContents(lFromDB, ban3);
 	}
 }
