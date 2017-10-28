@@ -168,8 +168,34 @@ public class USLPropagator {
 			Person mod, Person banned, MonitoredSubreddit from, List<SubscribedHashtag> relevant, String tagsStringified,
 			List<BanHistory> personBannedOnSubreddit,
 			List<UserBanInformation> bans, List<ModmailPMInformation> modmailPms, List<UserPMInformation> userPms) {
+		// First we need to determine if the last thing to happen is us banning the guy on the subreddit,
+		// in which case we should do nothing
+				
+		BanHistory latestBan = database.getBanHistoryMapping().fetchBanHistoryByPersonAndSubreddit(banned.id, subreddit.id);
+		UnbanHistory latestUnban = database.getUnbanHistoryMapping().fetchUnbanHistoryByPersonAndSubreddit(banned.id, subreddit.id);
 		
+		if(latestBan != null) {
+			HandledModAction mostRecentBanHMA = database.getHandledModActionMapping().fetchByID(latestBan.id);
+			boolean beforeUnbanOrNoUnban = true;
+			if(latestUnban != null) {
+				HandledModAction mostRecentUnbanHMA = database.getHandledModActionMapping().fetchByID(latestUnban.id);
+				
+				if(mostRecentUnbanHMA.occurredAt.after(mostRecentBanHMA.occurredAt)) {
+					beforeUnbanOrNoUnban = false;
+				}
+			}
+			
+			if(beforeUnbanOrNoUnban) {
+				Person latestBanMod = database.getPersonMapping().fetchByID(latestBan.modPersonID);
+				
+				if(latestBanMod.username.equalsIgnoreCase(config.getProperty("user.username"))) {
+					return true;
+				}
+			}
+		}
+						
 		List<UnbanHistory> personUnbannedOnSubreddit = database.getUnbanHistoryMapping().fetchUnbanHistoriesByPersonAndSubreddit(history.bannedPersonID, subreddit.id);
+		
 		
 		Map<Integer, Person> modsFromDB = new HashMap<>();
 		Map<Person, List<BanHistory>> oldBanHistoriesByPerson = new HashMap<>();
@@ -226,9 +252,6 @@ public class USLPropagator {
 					));
 		}
 		
-		BanHistory latestBan = database.getBanHistoryMapping().fetchBanHistoryByPersonAndSubreddit(history.bannedPersonID, subreddit.id);
-		UnbanHistory latestUnban = database.getUnbanHistoryMapping().fetchUnbanHistoryByPersonAndSubreddit(history.bannedPersonID, subreddit.id);
-		
 		if(latestBan == null) {
 			throw new IllegalArgumentException("shouldn't get here without latestBan");
 		}
@@ -251,7 +274,6 @@ public class USLPropagator {
 		
 		boolean suppressed = (currentlyBanned && currentlyPermabanned);
 
-		
 		Collections.sort(historyOfPersonOnSubreddit);
 		String historyOfPersonString = String.join("\n", 
 				historyOfPersonOnSubreddit.stream().map(
@@ -273,6 +295,10 @@ public class USLPropagator {
 		userPMResponseInfo.addLongtermString("full history", historyOfPersonString);
 		for(int modPersonWithHistoryID : modsFromDB.keySet()) {
 			Person modPersonWithHistory = modsFromDB.get(modPersonWithHistoryID);
+			
+			if(modPersonWithHistory.username.equalsIgnoreCase(config.getProperty("user.username"))) {
+				continue;
+			}
 			
 			userPMResponseInfo.addTemporaryString("old mod", modPersonWithHistory.username);
 			

@@ -6,6 +6,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.Level;
 import org.json.simple.parser.ParseException;
@@ -76,9 +77,6 @@ public class USLBotDriver extends BotDriver {
 		
 		logger.trace("Considering backing up database..");
 		considerBackupDatabase();
-		
-		logger.trace("Sleeping for a while..");
-		sleepFor(30000);
 	}
 
 	/**
@@ -88,7 +86,7 @@ public class USLBotDriver extends BotDriver {
 		USLDatabase db = (USLDatabase) database;
 		
 		monitoredSubreddits = db.getMonitoredSubredditMapping().fetchAll();
-		bot.setSubreddit(String.join("+", monitoredSubreddits.toArray(new String[]{})));
+		bot.setSubreddit(String.join("+", monitoredSubreddits.stream().map(ms -> ms.subreddit).collect(Collectors.toList())));
 	}
 
 	/**
@@ -146,12 +144,15 @@ public class USLBotDriver extends BotDriver {
 			latestHandledModAction = db.getHandledModActionMapping().fetchByID(progress.latestHandledModActionID);
 		}
 		
-		Listing bans = getSubActions(sub, null, latestHandledModAction != null ? latestHandledModAction.modActionID : null);
+		String after = latestHandledModAction != null ? latestHandledModAction.modActionID : null;
+		logger.trace("Fetching moderator log for /r/" + sub.subreddit + ", before=null, after=" + after);
+		Listing bans = getSubActions(sub, null, after);
+		logger.trace("Got " + bans.numChildren() + " results");
 		sleepFor(2000);
 		
 		HandledModAction afterAction = null;
-		HandledModAction latestAction = null;
-		HandledModAction earliestAction = null;
+		HandledModAction earliestInTimeAction = null;
+		HandledModAction latestInTimeAction = null;
 		for(int i = 0; i < bans.numChildren(); i++) {
 			Thing child = bans.getChild(i);
 			if(!(child instanceof ModAction)) {
@@ -160,49 +161,62 @@ public class USLBotDriver extends BotDriver {
 			}
 			
 			ModAction action = (ModAction) child;
-			if(db.getHandledModActionMapping().fetchByModActionID(action.id()) != null) {
+			HandledModAction handled = db.getHandledModActionMapping().fetchByModActionID(action.id()); 
+			if(handled != null) {
+				logger.trace("Child " + i + " we had already seen");
 				continue;
-			}
+			}else {
+				handled = new HandledModAction(-1, sub.id, action.id(), new Timestamp((long)(action.createdUTC() * 1000)));
 			
-			HandledModAction handled = new HandledModAction(-1, sub.id, action.id(), new Timestamp((long)(action.createdUTC() * 1000)));
-			db.getHandledModActionMapping().save(handled);
-
-			if(action.action().equalsIgnoreCase("banuser")) {
-				BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action, handled);
-				logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
-			}else if(action.action().equalsIgnoreCase("unbanuser")) {
-				UnbanHistory unbanHistory = createAndSaveUnbanHistoryFromAction(db, sub, action, handled);
-				logger.printf(Level.INFO, "Detected new unban: %s", unbanHistory.toString());
+				db.getHandledModActionMapping().save(handled);
+	
+				if(action.action().equalsIgnoreCase("banuser")) {
+					logger.trace("Child " + i + " was a new ban, saving it then will dump it");
+					BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action, handled);
+					logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
+				}else if(action.action().equalsIgnoreCase("unbanuser")) {
+					logger.trace("Child " + i + " was a new unban, saving it then will dump it");
+					UnbanHistory unbanHistory = createAndSaveUnbanHistoryFromAction(db, sub, action, handled);
+					logger.printf(Level.INFO, "Detected new unban: %s", unbanHistory.toString());
+				}else {
+					logger.trace("Child " + i + " was a " + action.action() + "; ignoring it");
+				}
 			}
 
 			if(bans.after() != null && action.id().equalsIgnoreCase(bans.after())) {
 				afterAction = handled;
 			}
 			
-			if(latestAction == null || handled.occurredAt.getTime() > latestAction.occurredAt.getTime()) {
-				latestAction = handled;
+			if(earliestInTimeAction == null || handled.occurredAt.before(earliestInTimeAction.occurredAt)) {
+				earliestInTimeAction = handled;
 			}
 			
-			if(earliestAction == null || handled.occurredAt.getTime() < earliestAction.occurredAt.getTime()) {
-				earliestAction = handled;
+			if(latestInTimeAction == null || handled.occurredAt.after(latestInTimeAction.occurredAt)) {
+				latestInTimeAction = handled;
 			}
 		}
 		
 		if(progress.newestHandledModActionID == null) {
-			if(earliestAction == null) {
+			if(latestInTimeAction == null) {
 				logger.error("Either there are 0 bans in " + sub.subreddit + " or something has gone horribly wrong. Pming usl");
 				sendModmail("universalscammerlist", "USLBot Unrecoverable Errors", "When monitoring /r/" + sub.subreddit + " I "
-						+ "found no bans. I think it's more likely something went wrong. Shutting down.");
+						+ "found no bans. I think it's more likely something went wrong.\n"
+						+ "\n"
+						+ "---\n"
+						+ "\n"
+						+ "Here is a dump of the Listing result that was returned:\n"
+						+ "\n"
+						+ bans.toString());
 				logger.error("Initiating shutdown..");
 				System.exit(1);
 			}else {
-				progress.newestHandledModActionID = earliestAction.id;
+				progress.newestHandledModActionID = latestInTimeAction.id;
 			}
 		}
 		
 		if(bans.after() != null) {
-			if(afterAction != latestAction) { 
-				logger.warn("Listing after() is not equal to the ban in the listing with the latest timestamp!");
+			if(afterAction != earliestInTimeAction) { 
+				logger.warn("Listing after() is not equal to the ban in the listing with the least recent timestamp!");
 				logger.warn(bans.toString());
 			}
 			
@@ -210,8 +224,8 @@ public class USLBotDriver extends BotDriver {
 				logger.warn("Listing after() references an id that isn't in the listing!");
 				logger.warn(bans.toString());
 				
-				if(latestAction != null) {
-					progress.latestHandledModActionID = latestAction.id; 
+				if(earliestInTimeAction != null) {
+					progress.latestHandledModActionID = earliestInTimeAction.id; 
 				}else {
 					logger.error("Could not fallback to latest ban by timestamp; that was null too!");
 					logger.error("This position is unrecoverable and will have the subreddit looping. Sending modmail to USL");
@@ -222,7 +236,7 @@ public class USLBotDriver extends BotDriver {
 							+ "\n"
 							+ "---\n"
 							+ "\n"
-							+ "I was using after=" + (latestAction != null ? latestAction.modActionID : null));
+							+ "I was using after=" + (earliestInTimeAction != null ? earliestInTimeAction.modActionID : null));
 					logger.error("Initiating shutdown..");
 					System.exit(1);
 				}
@@ -234,8 +248,8 @@ public class USLBotDriver extends BotDriver {
 		}else {
 			logger.info("Reached end of /r/" + sub.subreddit + " modqueue actions.");
 			
-			if(latestAction != null) {
-				progress.latestHandledModActionID = latestAction.id;
+			if(earliestInTimeAction != null) {
+				progress.latestHandledModActionID = earliestInTimeAction.id;
 			}else {
 				logger.warn("The last page was empty for " + sub.subreddit + ". There is a chance this means that reddits pagination failed!");
 			}
@@ -264,10 +278,12 @@ public class USLBotDriver extends BotDriver {
 		
 		HandledModAction newestModAction = db.getHandledModActionMapping().fetchByID(progress.newestHandledModActionID);
 		
+		logger.trace("Fetching subreddit " + sub.subreddit + "s modqueue, before=" + newestModAction.modActionID + ", after=null");
 		Listing beforeNewest = getSubActions(sub, newestModAction.modActionID, null);
+		logger.trace("Got beforeNewest = " + beforeNewest);
 		sleepFor(2000);
 		
-		HandledModAction earliestHandled = null;
+		HandledModAction mostRecentHandled = null;
 		HandledModAction beforeHandled = null;
 		for(int i = 0; i < beforeNewest.numChildren(); i++) {
 			Thing thing = beforeNewest.getChild(i);
@@ -277,28 +293,38 @@ public class USLBotDriver extends BotDriver {
 			}
 			
 			ModAction action = (ModAction) thing;
-			if(db.getHandledModActionMapping().fetchByModActionID(action.id()) != null) {
-				continue;
+			boolean alreadySaw = false;
+			HandledModAction handled = db.getHandledModActionMapping().fetchByModActionID(action.id());
+			
+			if (handled != null) {
+				logger.trace("Child " + i + " we had already seen");
+				alreadySaw = true;
 			}
 			
-			HandledModAction handled = new HandledModAction(-1, sub.id, action.id(), new Timestamp((long)(action.createdUTC() * 1000)));
-			db.getHandledModActionMapping().save(handled);
-			
-			
-			if(action.action().equalsIgnoreCase("banuser")) {
-				BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action, handled);
-				logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
-			}else if(action.action().equalsIgnoreCase("unbanuser")) {
-				UnbanHistory unbanHistory = createAndSaveUnbanHistoryFromAction(db, sub, action, handled);
-				logger.printf(Level.INFO, "Detected new unban: %s", unbanHistory.toString());
+			if(!alreadySaw) {
+				handled = new HandledModAction(-1, sub.id, action.id(), new Timestamp((long)(action.createdUTC() * 1000)));
+				db.getHandledModActionMapping().save(handled);
+				
+				
+				if(action.action().equalsIgnoreCase("banuser")) {
+					logger.trace("Child " + i + " was a ban, saving then dumping");
+					BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action, handled);
+					logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
+				}else if(action.action().equalsIgnoreCase("unbanuser")) {
+					logger.trace("Child " + i + " was an unban, saving then dumping");
+					UnbanHistory unbanHistory = createAndSaveUnbanHistoryFromAction(db, sub, action, handled);
+					logger.printf(Level.INFO, "Detected new unban: %s", unbanHistory.toString());
+				}else {
+					logger.trace("Child " + i + " was a " + action.action() + "; ignoring");
+				}
 			}
 			
 			if(beforeNewest.before() != null && action.id().equalsIgnoreCase(beforeNewest.before())) {
 				beforeHandled = handled;
 			}
 			
-			if(earliestHandled == null || handled.occurredAt.getTime() < earliestHandled.occurredAt.getTime()) {
-				earliestHandled = handled;
+			if(mostRecentHandled == null || handled.occurredAt.after(mostRecentHandled.occurredAt)) {
+				mostRecentHandled = handled;
 			}
 		}
 		
@@ -309,19 +335,22 @@ public class USLBotDriver extends BotDriver {
 				System.exit(1);
 			}
 			
-			if(beforeHandled != earliestHandled) {
-				logger.warn("beforeNewest.before() is not the earliest ban in the listing. this should be recoverable but it's weird");
+			if(beforeHandled != mostRecentHandled) {
+				logger.warn("beforeNewest.before() is not the most recent ban in the listing. this should be recoverable but it's weird");
 			}
 			
+			logger.trace("Using reddits suggested before target of " + beforeNewest.before() + " which we found");
 			progress.newestHandledModActionID = beforeHandled.id;
 			db.getSubredditModqueueProgressMapping().save(progress);
 			return false;
 		}else {
-			if(earliestHandled == null) {
+			if(mostRecentHandled == null) {
+				logger.trace("beforeNewest.before() is null and mostRecentHandled is null, this means that we got no children.");
 				return true; // got an empty listing. no new bans since last check
 			}
 			
-			progress.newestHandledModActionID = earliestHandled.id;
+			logger.trace("Reddit gave us before=null, so using the one with the latest timestamp " + timeToPretty(mostRecentHandled.occurredAt.getTime()));
+			progress.newestHandledModActionID = mostRecentHandled.id;
 			db.getSubredditModqueueProgressMapping().save(progress);
 			return true;
 		}
@@ -413,7 +442,7 @@ public class USLBotDriver extends BotDriver {
 		
 		for(int i = 0; i < 5; i++) {
 			List<HandledModAction> handledActionsToPropagate = new ArrayList<>();
-			List<HandledModAction> timeCollisions = db.getHandledModActionMapping().fetchByTimestampForSubreddit(subreddit.id, status.latestPropagatedActionTime);
+			List<HandledModAction> timeCollisions = db.getHandledModActionMapping().fetchByTimestamp(status.latestPropagatedActionTime);
 			List<HandledAtTimestamp> handledCollisions = db.getHandledAtTimestampMapping().fetchByMonitoredSubredditID(subreddit.id);
 			for(HandledModAction hma : timeCollisions) {
 				boolean found = false;
@@ -428,7 +457,9 @@ public class USLBotDriver extends BotDriver {
 					handledActionsToPropagate.add(hma);
 				}
 			}
-			handledActionsToPropagate.addAll(db.getHandledModActionMapping().fetchLatestForSubreddit(subreddit.id, status.latestPropagatedActionTime, 50));
+			// we use 1 week from epoch here because it acts really funny near 0
+			Timestamp after = status.latestPropagatedActionTime == null ? new Timestamp((long)(6.048e+8)) : status.latestPropagatedActionTime;
+			handledActionsToPropagate.addAll(db.getHandledModActionMapping().fetchLatest(after, 50));
 			
 			if(handledActionsToPropagate.isEmpty()) {
 				logger.trace("Out of things to propagate for " + subreddit.subreddit);
@@ -515,12 +546,12 @@ public class USLBotDriver extends BotDriver {
 	
 	/**
 	 * Bans the specified user from the specified subreddit. This is just 
-	 * a wrapper around handleBanUser(username, message, reason, note)
+	 * a wrapper around handleBanUser(subreddit, username, message, reason, note)
 	 * 
 	 * @param banInfo the information regarding the ban
 	 */
 	protected void handleBanUser(UserBanInformation banInfo) {
-		super.handleBanUser(banInfo.person.username, banInfo.banMessage, banInfo.banReason, banInfo.banNote);
+		super.handleBanUser(banInfo.subreddit.subreddit, banInfo.person.username, banInfo.banMessage, banInfo.banReason, banInfo.banNote);
 	}
 	
 	/**
@@ -544,7 +575,7 @@ public class USLBotDriver extends BotDriver {
 	 * @return the listing
 	 */
 	protected Listing getSubActions(MonitoredSubreddit sub, String before, String after) {
-		return new Retryable<Listing>("get subreddit ban actions", maybeLoginAgainRunnable) {
+		return new Retryable<Listing>("get subreddit moderator log", maybeLoginAgainRunnable) {
 			@Override
 			protected Listing runImpl() throws Exception {
 				return RedditUtils.getModeratorLog(sub.subreddit, null, null, before, after, bot.getUser());

@@ -26,6 +26,23 @@ public interface HandledModActionMapping extends ObjectMapping<HandledModAction>
 	public HandledModAction fetchByModActionID(String modActionID);
 
 	/**
+	 * Fetch handled mod actions by timestamp
+	 * 
+	 * @param timestamp the time stamp
+	 * @return handled mod actions with that timestamp
+	 */
+	public List<HandledModAction> fetchByTimestamp(Timestamp timestamp);
+	
+	/**
+	 * Fetch handled mod actions after the specified timestamp
+	 * 
+	 * @param after after time
+	 * @param num number
+	 * @return up to num handled mod actions strictly later than after
+	 */
+	public List<HandledModAction> fetchLatest(Timestamp after, int num);
+	
+	/**
 	 * Reddit only uses second-precision on its result, so theres a very
 	 * good chance of timestamp collisions. It's important to handle these.
 	 * 
@@ -33,6 +50,7 @@ public interface HandledModActionMapping extends ObjectMapping<HandledModAction>
 	 * @param timestamp the timestamp
 	 * @return the list of handled mod actions at the given timestamp for the specified subreddit
 	 */
+	@Deprecated
 	public List<HandledModAction> fetchByTimestampForSubreddit(int monitoredSubredditID, Timestamp timestamp);
 	
 	/**
@@ -44,6 +62,7 @@ public interface HandledModActionMapping extends ObjectMapping<HandledModAction>
 	 * @param num the maximum number of results returned
 	 * @return at most num HandledModAction with id>after in ascending order
 	 */
+	@Deprecated
 	public List<HandledModAction> fetchLatestForSubreddit(int monitoredSubredditID, Timestamp after, int num);
 	
 }

@@ -104,6 +104,24 @@ public class MysqlHandledModActionMapping extends MysqlObjectWithIDMapping<Handl
 	}
 
 	@Override
+	public List<HandledModAction> fetchByTimestamp(Timestamp timestamp) {
+		return fetchByAction("SELECT * FROM " + table + " WHERE occurred_at=?", 
+				new PreparedStatementSetVarsUnsafe(
+						new MysqlTypeValueTuple(Types.TIMESTAMP, timestamp)),
+				fetchListFromSetFunction());
+	}
+	
+
+	@Override
+	public List<HandledModAction> fetchLatest(Timestamp after, int num) {
+		return fetchByAction("SELECT * FROM " + table + " WHERE occurred_at>? ORDER BY occurred_at ASC LIMIT ?", 
+				new PreparedStatementSetVarsUnsafe(
+						new MysqlTypeValueTuple(Types.TIMESTAMP, after),
+						new MysqlTypeValueTuple(Types.INTEGER, num)),
+				fetchListFromSetFunction());
+	}
+	
+	@Override
 	public List<HandledModAction> fetchByTimestampForSubreddit(int monitoredSubredditID, Timestamp timestamp) {
 		return fetchByAction("SELECT * FROM " + table + " WHERE monitored_subreddit_id=? AND occurred_at=?", 
 				new PreparedStatementSetVarsUnsafe(

@@ -85,6 +85,7 @@ public class HandledModActionMappingTest {
 		assertNull(fromDB);
 	}
 	
+	@SuppressWarnings("deprecation")
 	@Test
 	public void testFetchByTimestampAndSubreddit() {
 		MonitoredSubreddit sub = new MonitoredSubreddit(-1, "johnssub", false, false, true);
@@ -115,6 +116,7 @@ public class HandledModActionMappingTest {
 		MysqlTestUtils.assertListContents(fromDB, mAction2, mAction3);
 	}
 	
+	@SuppressWarnings("deprecation")
 	@Test
 	public void testFetchLatestBySubreddit() {
 		MonitoredSubreddit sub = new MonitoredSubreddit(-1, "johnssub", false, false, true);

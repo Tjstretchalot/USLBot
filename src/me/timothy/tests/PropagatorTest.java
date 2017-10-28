@@ -492,6 +492,75 @@ public class PropagatorTest {
 				userPM.body
 				);
 	}
+	
+	@Test
+	public void testDoesntPMHimself() {
+		initResponses();
+		
+		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
+		Person bot = database.getPersonMapping().fetchOrCreateByUsername(config.getProperty("user.username"));
+		//Person eric = database.getPersonMapping().fetchOrCreateByUsername("eric");
+		Person john = database.getPersonMapping().fetchOrCreateByUsername("john");
+		
+		MonitoredSubreddit paulsSub = new MonitoredSubreddit(-1, "paulssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(paulsSub);
+		
+		MonitoredSubreddit ericsSub = new MonitoredSubreddit(-1, "ericssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(ericsSub);
+		
+		long now = System.currentTimeMillis();
+		SubscribedHashtag paulsTag = new SubscribedHashtag(-1, paulsSub.id, "#scammer", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(paulsTag);
+		
+		SubscribedHashtag ericsTag = new SubscribedHashtag(-1, ericsSub.id, "#scammer", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(ericsTag);
+		
+		HandledModAction paulBansJohnHMA = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(now));
+		database.getHandledModActionMapping().save(paulBansJohnHMA);
+		
+		BanHistory paulBansJohnBH = new BanHistory(-1, paul.id, john.id, paulBansJohnHMA.id, "#scammer", "permanent");
+		database.getBanHistoryMapping().save(paulBansJohnBH);
+		
+		PropagateResult result = propagator.propagateBan(paulsSub, paulBansJohnHMA, paulBansJohnBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(ericsSub, paulBansJohnHMA, paulBansJohnBH);
+		assertEquals(1, result.bans.size());
+		assertEquals(1, result.modmailPMs.size());
+		assertTrue(result.userPMs.isEmpty());
+		
+		assertEquals(john, result.bans.get(0).person);
+		assertEquals(ericsSub, result.bans.get(0).subreddit);
+		assertEquals(ericsSub, result.modmailPMs.get(0).subreddit);
+		
+		HandledModAction botBansJohnEricsSubHMA = new HandledModAction(-1, ericsSub.id, "ModAction_ID2", new Timestamp(now));
+		database.getHandledModActionMapping().save(botBansJohnEricsSubHMA);
+		
+		BanHistory botBansJohnEricsSubBH = new BanHistory(-1, bot.id, john.id, botBansJohnEricsSubHMA.id, "USLBot; #scammer", "permanent");
+		database.getBanHistoryMapping().save(botBansJohnEricsSubBH);
+		
+		result = propagator.propagateBan(paulsSub, botBansJohnEricsSubHMA, botBansJohnEricsSubBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(ericsSub, botBansJohnEricsSubHMA, botBansJohnEricsSubBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(paulsSub, paulBansJohnHMA, paulBansJohnBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(ericsSub, paulBansJohnHMA, paulBansJohnBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+	}
 
 	@After 
 	public void cleanUp() {

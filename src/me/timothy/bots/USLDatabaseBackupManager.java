@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
+import java.sql.SQLException;
 import java.util.Vector;
 
 import org.apache.logging.log4j.LogManager;
@@ -87,6 +88,14 @@ public class USLDatabaseBackupManager {
 		
 		logger.debug("Choosing new backup time..");
 		selectNextBackupTime(now);
+		
+		logger.debug("Reconnecting to MySQL database..");
+		try {
+			database.connect(config.getProperty("database.username"), config.getProperty("database.password"), config.getProperty("database.url"));
+		} catch (SQLException e) {
+			logger.throwing(e);
+			throw new RuntimeException(e);
+		}
 	}
 	/**
 	 * Decides where to save the backup file initially.
