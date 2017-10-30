@@ -347,7 +347,6 @@ public class USLPropagator {
 		userPMResponseInfo.addLongtermString("suppressed", Boolean.toString(suppressed));
 		userPMResponseInfo.addLongtermString("triggering tags", tagsStringified);
 		userPMResponseInfo.addLongtermString("full history", historyOfPersonString);
-		System.out.println("ModsFromDB = " + modsFromDB.toString());
 		for(int modPersonWithHistoryID : modsFromDB.keySet()) {
 			Person modPersonWithHistory = modsFromDB.get(modPersonWithHistoryID);
 			
