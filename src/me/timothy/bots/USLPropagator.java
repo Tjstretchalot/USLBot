@@ -8,6 +8,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import me.timothy.bots.memory.ModmailPMInformation;
 import me.timothy.bots.memory.PropagateResult;
 import me.timothy.bots.memory.UserBanInformation;
@@ -37,6 +40,7 @@ import me.timothy.bots.responses.ResponseInfoFactory;
  * @author Timothy
  */
 public class USLPropagator {
+	private static final Logger logger = LogManager.getLogger();
 	
 	/**
 	 * The file configuration
@@ -73,6 +77,9 @@ public class USLPropagator {
 	{
 		Person mod = database.getPersonMapping().fetchByID(history.modPersonID);
 		if(mod.username.equalsIgnoreCase(config.getProperty("user.username"))) 
+			return new PropagateResult(subreddit, hma);
+		
+		if(mod.username.equalsIgnoreCase("Guzbot3000"))
 			return new PropagateResult(subreddit, hma);
 		
 		if(!history.banDetails.equalsIgnoreCase("permanent"))
@@ -168,17 +175,23 @@ public class USLPropagator {
 			Person mod, Person banned, MonitoredSubreddit from, List<SubscribedHashtag> relevant, String tagsStringified,
 			List<BanHistory> personBannedOnSubreddit,
 			List<UserBanInformation> bans, List<ModmailPMInformation> modmailPms, List<UserPMInformation> userPms) {
-		// First we need to determine if the last thing to happen is us banning the guy on the subreddit,
+		// First we need to determine if the last thing to happen is us or Guzbot3000 banning the guy on the subreddit,
 		// in which case we should do nothing
-				
+		
+		// Also we need to ensure we're not pming people that have "old history" when their "old history" is actually
+		// newer than this ban, which is possible
+		
+		Person mePerson = database.getPersonMapping().fetchOrCreateByUsername(config.getProperty("user.username"));
+		Person guzbotPerson = database.getPersonMapping().fetchOrCreateByUsername("Guzbot3000");
+		
 		BanHistory latestBan = database.getBanHistoryMapping().fetchBanHistoryByPersonAndSubreddit(banned.id, subreddit.id);
 		UnbanHistory latestUnban = database.getUnbanHistoryMapping().fetchUnbanHistoryByPersonAndSubreddit(banned.id, subreddit.id);
 		
 		if(latestBan != null) {
-			HandledModAction mostRecentBanHMA = database.getHandledModActionMapping().fetchByID(latestBan.id);
+			HandledModAction mostRecentBanHMA = database.getHandledModActionMapping().fetchByID(latestBan.handledModActionID);
 			boolean beforeUnbanOrNoUnban = true;
 			if(latestUnban != null) {
-				HandledModAction mostRecentUnbanHMA = database.getHandledModActionMapping().fetchByID(latestUnban.id);
+				HandledModAction mostRecentUnbanHMA = database.getHandledModActionMapping().fetchByID(latestUnban.handledModActionID);
 				
 				if(mostRecentUnbanHMA.occurredAt.after(mostRecentBanHMA.occurredAt)) {
 					beforeUnbanOrNoUnban = false;
@@ -186,11 +199,8 @@ public class USLPropagator {
 			}
 			
 			if(beforeUnbanOrNoUnban) {
-				Person latestBanMod = database.getPersonMapping().fetchByID(latestBan.modPersonID);
-				
-				if(latestBanMod.username.equalsIgnoreCase(config.getProperty("user.username"))) {
+				if(latestBan.modPersonID == mePerson.id || latestBan.modPersonID == guzbotPerson.id)
 					return true;
-				}
 			}
 		}
 						
@@ -198,11 +208,19 @@ public class USLPropagator {
 		
 		
 		Map<Integer, Person> modsFromDB = new HashMap<>();
+		Map<Integer, Timestamp> oldestHistoryByPerson = new HashMap<>();
 		Map<Person, List<BanHistory>> oldBanHistoriesByPerson = new HashMap<>();
 		Map<Person, List<UnbanHistory>> oldUnbanHistoriesByPerson = new HashMap<>();
 		List<TimestampStringTuple> historyOfPersonOnSubreddit = new ArrayList<>();
+
+		
+		boolean botHistory = false;
+		Timestamp newestBotHistory = null;
 		
 		for(BanHistory bh : personBannedOnSubreddit) {
+			if(bh.handledModActionID == hma.id)
+				continue;
+			
 			Person oldMod;
 			if(!modsFromDB.containsKey(bh.modPersonID)) {
 				oldMod = database.getPersonMapping().fetchByID(bh.modPersonID);
@@ -220,14 +238,33 @@ public class USLPropagator {
 			}
 			
 			otherBans.add(bh);
-			
 			HandledModAction bhHMA = database.getHandledModActionMapping().fetchByID(bh.handledModActionID);
+			
+			if(!oldestHistoryByPerson.containsKey(oldMod.id)) {
+				oldestHistoryByPerson.put(oldMod.id, bhHMA.occurredAt);
+			}else {
+				Timestamp oldTime = oldestHistoryByPerson.get(oldMod.id);
+				if(oldTime.after(bhHMA.occurredAt)) {
+					oldestHistoryByPerson.put(oldMod.id, bhHMA.occurredAt);
+				}
+			}
+			
+			if(bh.modPersonID == mePerson.id || bh.modPersonID == guzbotPerson.id) {
+				botHistory = true;
+				if(newestBotHistory == null || bhHMA.occurredAt.after(newestBotHistory)) {
+					newestBotHistory = bhHMA.occurredAt;
+				}
+			}
+			
 			historyOfPersonOnSubreddit.add(new TimestampStringTuple(bhHMA.occurredAt, 
 					String.format("%s banned %s for %s - %s", oldMod.username, banned.username, bh.banDetails, bh.banDescription)
 					));
 		}
 
 		for(UnbanHistory ubh : personUnbannedOnSubreddit) {
+			if(ubh.handledModActionID == hma.id)
+				continue;
+			
 			Person oldMod;
 			if(!modsFromDB.containsKey(ubh.modPersonID)) {
 				oldMod = database.getPersonMapping().fetchByID(ubh.modPersonID);
@@ -247,6 +284,23 @@ public class USLPropagator {
 			otherBans.add(ubh);
 			
 			HandledModAction ubhHMA = database.getHandledModActionMapping().fetchByID(ubh.handledModActionID);
+
+			if(!oldestHistoryByPerson.containsKey(oldMod.id)) {
+				oldestHistoryByPerson.put(oldMod.id, ubhHMA.occurredAt);
+			}else {
+				Timestamp oldTime = oldestHistoryByPerson.get(oldMod.id);
+				if(oldTime.after(ubhHMA.occurredAt)) {
+					oldestHistoryByPerson.put(oldMod.id, ubhHMA.occurredAt);
+				}
+			}
+			
+			if(ubh.modPersonID == mePerson.id || ubh.modPersonID == guzbotPerson.id) {
+				botHistory = true;
+				if(newestBotHistory == null || ubhHMA.occurredAt.after(newestBotHistory)) {
+					newestBotHistory = ubhHMA.occurredAt;
+				}
+			}
+			
 			historyOfPersonOnSubreddit.add(new TimestampStringTuple(ubhHMA.occurredAt, 
 					String.format("%s unbanned %s", oldMod.username, banned.username)
 					));
@@ -293,10 +347,13 @@ public class USLPropagator {
 		userPMResponseInfo.addLongtermString("suppressed", Boolean.toString(suppressed));
 		userPMResponseInfo.addLongtermString("triggering tags", tagsStringified);
 		userPMResponseInfo.addLongtermString("full history", historyOfPersonString);
+		System.out.println("ModsFromDB = " + modsFromDB.toString());
 		for(int modPersonWithHistoryID : modsFromDB.keySet()) {
 			Person modPersonWithHistory = modsFromDB.get(modPersonWithHistoryID);
 			
-			if(modPersonWithHistory.username.equalsIgnoreCase(config.getProperty("user.username"))) {
+			if(modPersonWithHistory.id == mePerson.id) {
+				continue;
+			}else if(modPersonWithHistory.id == guzbotPerson.id) {
 				continue;
 			}
 			
@@ -309,6 +366,35 @@ public class USLPropagator {
 			List<UnbanHistory> thisModPersonsUnbans = oldUnbanHistoriesByPerson.get(modPersonWithHistory);
 			if(thisModPersonsUnbans == null) {
 				thisModPersonsUnbans = new ArrayList<>();
+			}
+			
+			if(botHistory) {
+				Timestamp latestActionByThisMod = null;
+				for(BanHistory bh : thisModPersonsBans) {
+					HandledModAction bhHMA = database.getHandledModActionMapping().fetchByID(bh.handledModActionID);
+					if(latestActionByThisMod == null || bhHMA.occurredAt.after(latestActionByThisMod)) {
+						latestActionByThisMod = bhHMA.occurredAt;
+					}
+				}
+				for(UnbanHistory ubh : thisModPersonsUnbans) {
+					HandledModAction ubhHMA = database.getHandledModActionMapping().fetchByID(ubh.handledModActionID);
+					if(latestActionByThisMod == null || ubhHMA.occurredAt.after(latestActionByThisMod)) {
+						latestActionByThisMod = ubhHMA.occurredAt;
+					}
+				}
+				
+				if(latestActionByThisMod.before(newestBotHistory)) {
+					logger.trace("Not sending a pm to " + modPersonWithHistory.username + " because a bot has taken actions since his last action and "
+							+ "it would be redundant to pm him about it now");
+					continue;
+				}
+			}
+			
+			Timestamp oldestAction = oldestHistoryByPerson.get(modPersonWithHistory.id);
+			if(oldestAction.after(hma.occurredAt)) {
+				// We shouldn't send a pm to this guy, because he's not the "old mod" with "old history" considering
+				// his oldest action is AFTER this action
+				continue;
 			}
 			
 			userPMResponseInfo.addTemporaryString("old mod num bans", Integer.toString(thisModPersonsBans.size()));

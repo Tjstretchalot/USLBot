@@ -22,6 +22,7 @@ import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
 import me.timothy.bots.models.Response;
 import me.timothy.bots.models.SubscribedHashtag;
+import me.timothy.bots.models.UnbanHistory;
 import me.timothy.tests.database.mysql.MysqlTestUtils;
 
 /**
@@ -557,6 +558,152 @@ public class PropagatorTest {
 		assertTrue(result.userPMs.isEmpty());
 		
 		result = propagator.propagateBan(ericsSub, paulBansJohnHMA, paulBansJohnBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+	}
+	
+	@Test
+	public void testDoesntPMOrPropagateOldBots() {
+		initResponses();
+		
+		Person guzbot3000 = database.getPersonMapping().fetchOrCreateByUsername("Guzbot3000");
+		Person john = database.getPersonMapping().fetchOrCreateByUsername("john");
+		Person ella = database.getPersonMapping().fetchOrCreateByUsername("ella");
+		Person eric = database.getPersonMapping().fetchOrCreateByUsername("eric");
+		
+		MonitoredSubreddit johnsSub = new MonitoredSubreddit(-1, "johnssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(johnsSub);
+		
+		MonitoredSubreddit ellasSub = new MonitoredSubreddit(-1, "ellasub", false, false, false);
+		database.getMonitoredSubredditMapping().save(ellasSub);
+		
+		MonitoredSubreddit usl = new MonitoredSubreddit(-1, "usl", false, false, false);
+		database.getMonitoredSubredditMapping().save(usl);
+		
+		long now = System.currentTimeMillis();
+		SubscribedHashtag johnHashtag = new SubscribedHashtag(-1, johnsSub.id, "#scammer", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(johnHashtag);
+		
+		SubscribedHashtag ellasHashtag = new SubscribedHashtag(-1, ellasSub.id, "#scammer", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(ellasHashtag);
+		
+		SubscribedHashtag uslHashtag = new SubscribedHashtag(-1, usl.id, "#scammer", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(uslHashtag);
+
+		long oneDayInMilliseconds = 1000 * 60 * 60 * 24;
+		long fiftyDaysInMilliseconds = 50 * oneDayInMilliseconds;
+		long fiftyDaysAgo = now - fiftyDaysInMilliseconds;
+		HandledModAction ellasOldBanHMA = new HandledModAction(-1, ellasSub.id, "ModAction_ID4", new Timestamp(fiftyDaysAgo));
+		database.getHandledModActionMapping().save(ellasOldBanHMA);
+		
+		BanHistory ellasOldBanBH = new BanHistory(-1, ella.id, eric.id, ellasOldBanHMA.id, "#scammer", "permanent");
+		database.getBanHistoryMapping().save(ellasOldBanBH);
+		
+		long thirtyDaysInMilliseconds = 30 * oneDayInMilliseconds;
+		long thirtyDaysAgo = now - thirtyDaysInMilliseconds;
+		HandledModAction ellasOldUnbanHMA = new HandledModAction(-1, ellasSub.id, "ModAction_ID5", new Timestamp(thirtyDaysAgo));
+		database.getHandledModActionMapping().save(ellasOldUnbanHMA);
+		
+		UnbanHistory ellasOldUnbanUBH = new UnbanHistory(-1, ella.id, eric.id, ellasOldUnbanHMA.id);
+		database.getUnbanHistoryMapping().save(ellasOldUnbanUBH);
+		
+		HandledModAction johnsOriginalBanHMA = new HandledModAction(-1, johnsSub.id, "ModAction_ID1", new Timestamp(now));
+		database.getHandledModActionMapping().save(johnsOriginalBanHMA);		
+		
+		BanHistory johnsOriginalBanBH = new BanHistory(-1, john.id, eric.id, johnsOriginalBanHMA.id, "#scammer", "permanent");
+		database.getBanHistoryMapping().save(johnsOriginalBanBH);
+		
+		HandledModAction guzbotsPropagateToUSLHMA = new HandledModAction(-1, usl.id, "ModAction_ID2", new Timestamp(now + 5000));
+		database.getHandledModActionMapping().save(guzbotsPropagateToUSLHMA);
+		
+		BanHistory guzbotsBanOnUSLBH = new BanHistory(-1, guzbot3000.id, eric.id, guzbotsPropagateToUSLHMA.id, "#scammer", "permanent");
+		database.getBanHistoryMapping().save(guzbotsBanOnUSLBH);
+		
+		HandledModAction guzbotsPropagateToEllaHMA = new HandledModAction(-1, ellasSub.id, "ModAction_ID3", new Timestamp(now + 10000));
+		database.getHandledModActionMapping().save(guzbotsPropagateToEllaHMA);
+		
+		BanHistory guzbotsPropagateToEllaBH = new BanHistory(-1, guzbot3000.id, eric.id, guzbotsPropagateToEllaHMA.id, "#scammer", "permanent");
+		database.getBanHistoryMapping().save(guzbotsPropagateToEllaBH);
+		
+		PropagateResult result;
+
+
+		result = propagator.propagateBan(usl, ellasOldBanHMA, ellasOldBanBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(johnsSub, ellasOldBanHMA, ellasOldBanBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(ellasSub, ellasOldBanHMA, ellasOldBanBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+
+		
+		result = propagator.propagateUnban(usl, ellasOldUnbanHMA, ellasOldUnbanUBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateUnban(johnsSub, ellasOldUnbanHMA, ellasOldUnbanUBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateUnban(ellasSub, ellasOldUnbanHMA, ellasOldUnbanUBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		
+		result = propagator.propagateBan(usl, johnsOriginalBanHMA, johnsOriginalBanBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(johnsSub, johnsOriginalBanHMA, johnsOriginalBanBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(ellasSub, johnsOriginalBanHMA, johnsOriginalBanBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+
+		
+		result = propagator.propagateBan(usl, guzbotsPropagateToUSLHMA, guzbotsBanOnUSLBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(johnsSub, guzbotsPropagateToUSLHMA, guzbotsBanOnUSLBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(ellasSub, guzbotsPropagateToUSLHMA, guzbotsBanOnUSLBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+
+		result = propagator.propagateBan(usl, guzbotsPropagateToEllaHMA, guzbotsPropagateToEllaBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(johnsSub, guzbotsPropagateToEllaHMA, guzbotsPropagateToEllaBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(ellasSub, guzbotsPropagateToEllaHMA, guzbotsPropagateToEllaBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());

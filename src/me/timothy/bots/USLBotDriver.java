@@ -558,7 +558,7 @@ public class USLBotDriver extends BotDriver {
 	 * Sends modmail to the specified subreddit
 	 * @param sub subreddit to message
 	 * @param title the title of the message
-	 * @param body the body of the mesage
+	 * @param body the body of the message
 	 */
 	protected void sendModmail(String sub, String title, String body) {
 		sendMessage("/r/" + sub, title, body);
