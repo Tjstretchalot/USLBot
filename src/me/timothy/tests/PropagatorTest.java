@@ -708,6 +708,138 @@ public class PropagatorTest {
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
 	}
+	
+	@Test
+	public void testHandlesBanDurationChanged() {
+		initResponses();
+		
+		Person eric = database.getPersonMapping().fetchOrCreateByUsername("eric");
+		//Person ella = database.getPersonMapping().fetchOrCreateByUsername("ella");
+		//Person me = database.getPersonMapping().fetchOrCreateByUsername(config.getProperty("user.username"));
+		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
+		Person john = database.getPersonMapping().fetchOrCreateByUsername("john");
+		
+		MonitoredSubreddit ericsSub = new MonitoredSubreddit(-1, "ericssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(ericsSub);
+		
+		MonitoredSubreddit ellasSub = new MonitoredSubreddit(-1, "ellassub", false, false, false);
+		database.getMonitoredSubredditMapping().save(ellasSub);
+		
+		MonitoredSubreddit mySub = new MonitoredSubreddit(-1, "mycoalitionsub", false, false, false);
+		database.getMonitoredSubredditMapping().save(mySub);
+		
+		long oneDay = 1000 * 60 * 60 * 60 * 24;
+		long now = System.currentTimeMillis();
+		SubscribedHashtag ericsTag1 = new SubscribedHashtag(-1, ericsSub.id, "#scammer", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(ericsTag1);
+		
+		SubscribedHashtag ellasTag1 = new SubscribedHashtag(-1, ellasSub.id, "#sketchy", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(ellasTag1);
+		
+		SubscribedHashtag myTag1 = new SubscribedHashtag(-1, mySub.id, "#scammer", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(myTag1);
+		
+		SubscribedHashtag myTag2 = new SubscribedHashtag(-1, mySub.id, "#sketchy", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(myTag2);
+		
+		long thirtyDaysAgo = now - (oneDay * 30);
+		long twentyDaysAgo = now - (oneDay * 20);
+		long fifteenDaysAgo = now - (oneDay * 15);
+		long tenDaysAgo = now - (oneDay * 10);
+		
+		HandledModAction ericBansPaulTemporarilyHMA = new HandledModAction(-1, ericsSub.id, "ModAction_ID1", new Timestamp(thirtyDaysAgo));
+		database.getHandledModActionMapping().save(ericBansPaulTemporarilyHMA);
+		
+		BanHistory ericBansPaulTemporarilyBH = new BanHistory(-1, eric.id, paul.id, ericBansPaulTemporarilyHMA.id, "#sketchy", "30 days");
+		database.getBanHistoryMapping().save(ericBansPaulTemporarilyBH);
+		
+		PropagateResult result;
+		
+		result = propagator.propagateBan(ericsSub, ericBansPaulTemporarilyHMA, ericBansPaulTemporarilyBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(ellasSub, ericBansPaulTemporarilyHMA, ericBansPaulTemporarilyBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(mySub, ericBansPaulTemporarilyHMA, ericBansPaulTemporarilyBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		
+		HandledModAction ericBansJohnTemporarilyHMA = new HandledModAction(-1, ericsSub.id, "ModAction_ID2", new Timestamp(twentyDaysAgo));
+		database.getHandledModActionMapping().save(ericBansJohnTemporarilyHMA);
+		
+		BanHistory ericBansJohnTemporarilyBH = new BanHistory(-1, eric.id, john.id, ericBansJohnTemporarilyHMA.id, "#scammer", "90 days");
+		database.getBanHistoryMapping().save(ericBansJohnTemporarilyBH);
+		
+		result = propagator.propagateBan(ericsSub, ericBansJohnTemporarilyHMA, ericBansJohnTemporarilyBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(ellasSub, ericBansJohnTemporarilyHMA, ericBansJohnTemporarilyBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(mySub, ericBansJohnTemporarilyHMA, ericBansJohnTemporarilyBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		
+		HandledModAction ericChangesPaulsBanToPermanentHMA = new HandledModAction(-1, ericsSub.id, "ModAction_ID3", new Timestamp(fifteenDaysAgo));
+		database.getHandledModActionMapping().save(ericChangesPaulsBanToPermanentHMA);
+		
+		BanHistory ericChangesPaulsBanToPermanentBH = new BanHistory(-1, eric.id, paul.id, ericChangesPaulsBanToPermanentHMA.id, null, "changed to permanent");
+		database.getBanHistoryMapping().save(ericChangesPaulsBanToPermanentBH);
+		
+		result = propagator.propagateBan(ericsSub, ericChangesPaulsBanToPermanentHMA, ericChangesPaulsBanToPermanentBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(ellasSub, ericChangesPaulsBanToPermanentHMA, ericChangesPaulsBanToPermanentBH);
+		assertEquals(1, result.bans.size());
+		assertEquals(paul, result.bans.get(0).person);
+		assertEquals(1, result.modmailPMs.size());
+		assertEquals(ellasSub, result.modmailPMs.get(0).subreddit);
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(mySub, ericChangesPaulsBanToPermanentHMA, ericChangesPaulsBanToPermanentBH);
+		assertEquals(1, result.bans.size());
+		assertEquals(paul, result.bans.get(0).person);
+		assertEquals(1, result.modmailPMs.size());
+		assertEquals(mySub, result.modmailPMs.get(0).subreddit);
+		assertTrue(result.userPMs.isEmpty());
+		
+		
+		HandledModAction ericChangesJohnBanTo180DaysHMA = new HandledModAction(-1, ericsSub.id, "ModAction_ID4", new Timestamp(tenDaysAgo));
+		database.getHandledModActionMapping().save(ericChangesJohnBanTo180DaysHMA);
+		
+		BanHistory ericChangesJohnBanTo180DaysBH = new BanHistory(-1, eric.id, john.id, ericChangesJohnBanTo180DaysHMA.id, null, "changed to 180 days");
+		database.getBanHistoryMapping().save(ericChangesJohnBanTo180DaysBH);
+		
+		result = propagator.propagateBan(ericsSub, ericChangesJohnBanTo180DaysHMA, ericChangesJohnBanTo180DaysBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(ellasSub, ericChangesJohnBanTo180DaysHMA, ericChangesJohnBanTo180DaysBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(mySub, ericChangesJohnBanTo180DaysHMA, ericChangesJohnBanTo180DaysBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+	}
 
 	@After 
 	public void cleanUp() {

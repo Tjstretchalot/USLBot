@@ -170,7 +170,7 @@ public class MysqlBanHistoryMapping extends MysqlObjectWithIDMapping<BanHistory>
 				+ "mod_person_id INT NOT NULL, "
 				+ "banned_person_id INT NOT NULL, "
 				+ "handled_modaction_id INT NOT NULL, "
-				+ "ban_description TEXT NOT NULL, "
+				+ "ban_description TEXT NULL, "
 				+ "ban_details TEXT NOT NULL, "
 				+ "PRIMARY KEY(id), "
 				+ "UNIQUE KEY(handled_modaction_id), "

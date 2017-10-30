@@ -29,8 +29,10 @@ public class BanHistory {
 	 * @param modPersonID the person who performed the ban (identified by "mod") as the id of the person in our database
 	 * @param bannedPersonID the person was banned (identified by "target_author") as the id of the person in our database
 	 * @param handledModActionID the id of the handledmodaction that this was parsed from
-	 * @param banDescription the description (provided by moderator when banning on reddit) of the ban 
-	 * @param banDetails the duration of the ban (reddit calls this "details"), such as "permanent" or "90 days"
+	 * @param banDescription the description (provided by moderator when banning on reddit) of the ban. may be null
+	 * if banDetails is "changed to" followed by a time (such as "changed to permanent")
+	 * @param banDetails the duration of the ban (reddit calls this "details"), such as "permanent" or "90 days". Alternatively,
+	 * the string literal "changed to " followed by a duration
 	 */
 	public BanHistory(int id, int modPersonID, int bannedPersonID, int handledModActionID,
 			String banDescription, String banDetails) {
@@ -44,7 +46,7 @@ public class BanHistory {
 
 	public boolean isValid() {
 		return (modPersonID > 0 && bannedPersonID > 0 && handledModActionID > 0
-				&& banDetails != null && banDescription != null && banDetails != null);
+				&& banDetails != null && banDetails != null);
 	}
 
 	@Override

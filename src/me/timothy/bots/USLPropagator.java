@@ -82,9 +82,6 @@ public class USLPropagator {
 		if(mod.username.equalsIgnoreCase("Guzbot3000"))
 			return new PropagateResult(subreddit, hma);
 		
-		if(!history.banDetails.equalsIgnoreCase("permanent"))
-			return new PropagateResult(subreddit, hma);
-		
 		if(subreddit.writeOnly)
 			return new PropagateResult(subreddit, hma);
 		
@@ -93,6 +90,12 @@ public class USLPropagator {
 		
 		MonitoredSubreddit from = database.getMonitoredSubredditMapping().fetchByID(hma.monitoredSubredditID);
 		if(from.readOnly)
+			return new PropagateResult(subreddit, hma);
+		
+		if(history.banDetails.startsWith("changed to"))
+			return propagateBanChangedDuration(subreddit, hma, history, mod, from);
+
+		if(!history.banDetails.equalsIgnoreCase("permanent"))
 			return new PropagateResult(subreddit, hma);
 		
 		List<SubscribedHashtag> relevant = new ArrayList<>();
@@ -154,6 +157,53 @@ public class USLPropagator {
 		
 		
 		return new PropagateResult(subreddit, hma, bans, modmailPms, userPms);
+	}
+
+	/**
+	 * This is called when history.banDetails starts with "changed to", which implies that there
+	 * exists an earlier BanHistory with the user.
+	 * 
+	 * @param subreddit the subreddit that the propagate should effect
+	 * @param hma the hma of history
+	 * @param history the history being propagated
+	 * @param mod the person with id history.modPersonID
+	 * @param from the subreddit with id hma.monitoredSubredditID
+	 * @return what to do
+	 */
+	private PropagateResult propagateBanChangedDuration(MonitoredSubreddit subreddit, HandledModAction hma,
+			BanHistory history, Person mod, MonitoredSubreddit from) {
+		if(!history.banDetails.equals("changed to permanent"))
+			return new PropagateResult(subreddit, hma); // effectively this is unbanning the dude as far as we're concerned
+		
+		Person banned = database.getPersonMapping().fetchByID(history.bannedPersonID);
+		
+		List<BanHistory> allKnownBans = database.getBanHistoryMapping().fetchBanHistoriesByPersonAndSubreddit(banned.id, from.id);
+		BanHistory mostRecentNonDurationChangingBanOlderThanHistory = null;
+		HandledModAction mostRecentNonDurationChangingBanOlderThanHistoryHMA = null;
+		
+		for(BanHistory bh : allKnownBans) {
+			if(bh.banDetails.startsWith("changed to"))
+				continue;
+			
+			HandledModAction bhHMA = database.getHandledModActionMapping().fetchByID(bh.handledModActionID);
+			
+			if(bhHMA.occurredAt.after(hma.occurredAt))
+				continue;
+			
+			if(mostRecentNonDurationChangingBanOlderThanHistory == null 
+					|| bhHMA.occurredAt.after(mostRecentNonDurationChangingBanOlderThanHistoryHMA.occurredAt)) {
+				mostRecentNonDurationChangingBanOlderThanHistory = bh;
+				mostRecentNonDurationChangingBanOlderThanHistoryHMA = bhHMA;
+			}
+		}
+		
+		if(mostRecentNonDurationChangingBanOlderThanHistory == null) {
+			throw new RuntimeException("Got a duration-changing ban history without a corresponding ban to change duration!");
+		}
+		
+		BanHistory fakeBanHistory = new BanHistory(-1, history.modPersonID, history.bannedPersonID, 
+				hma.id, mostRecentNonDurationChangingBanOlderThanHistory.banDescription, "permanent");
+		return propagateBan(subreddit, hma, fakeBanHistory);
 	}
 
 	private class TimestampStringTuple implements Comparable<TimestampStringTuple> {
@@ -256,9 +306,15 @@ public class USLPropagator {
 				}
 			}
 			
-			historyOfPersonOnSubreddit.add(new TimestampStringTuple(bhHMA.occurredAt, 
-					String.format("%s banned %s for %s - %s", oldMod.username, banned.username, bh.banDetails, bh.banDescription)
-					));
+			if(bh.banDetails.startsWith("changed to")) {
+				historyOfPersonOnSubreddit.add(new TimestampStringTuple(bhHMA.occurredAt, 
+						String.format("%s modified the ban on %s - %s", oldMod.username, banned.username, bh.banDetails)
+						));
+			}else {
+				historyOfPersonOnSubreddit.add(new TimestampStringTuple(bhHMA.occurredAt, 
+						String.format("%s banned %s for %s - %s", oldMod.username, banned.username, bh.banDetails, bh.banDescription)
+						));
+			}
 		}
 
 		for(UnbanHistory ubh : personUnbannedOnSubreddit) {
