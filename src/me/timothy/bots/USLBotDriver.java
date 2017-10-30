@@ -130,6 +130,7 @@ public class USLBotDriver extends BotDriver {
 				if(finished) {
 					progress.lastTimeHadFullHistory = new Timestamp(now);
 					db.getSubredditModqueueProgressMapping().save(progress);
+					return;
 				}
 			}
 		}
