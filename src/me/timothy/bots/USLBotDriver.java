@@ -418,7 +418,10 @@ public class USLBotDriver extends BotDriver {
 		USLDatabase db = (USLDatabase)database;
 		if(db.getSubredditModqueueProgressMapping().anyNullLastFullHistoryTime()) {
 			logger.debug("Not propagating bans right now, still have some subreddits not up-to-date");
+			return;
 		}
+		
+		System.exit(0);
 		
 		Timestamp dontPropagateLaterThan = db.getSubredditModqueueProgressMapping().fetchLeastRecentFullHistoryTime();
 		for(MonitoredSubreddit subreddit : monitoredSubreddits) {
