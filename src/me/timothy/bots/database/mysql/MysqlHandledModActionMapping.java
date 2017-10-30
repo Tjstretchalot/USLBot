@@ -113,10 +113,11 @@ public class MysqlHandledModActionMapping extends MysqlObjectWithIDMapping<Handl
 	
 
 	@Override
-	public List<HandledModAction> fetchLatest(Timestamp after, int num) {
-		return fetchByAction("SELECT * FROM " + table + " WHERE occurred_at>? ORDER BY occurred_at ASC LIMIT ?", 
+	public List<HandledModAction> fetchLatest(Timestamp after, Timestamp before, int num) {
+		return fetchByAction("SELECT * FROM " + table + " WHERE occurred_at>? AND occurred_at<? ORDER BY occurred_at ASC LIMIT ?", 
 				new PreparedStatementSetVarsUnsafe(
 						new MysqlTypeValueTuple(Types.TIMESTAMP, after),
+						new MysqlTypeValueTuple(Types.TIMESTAMP, before),
 						new MysqlTypeValueTuple(Types.INTEGER, num)),
 				fetchListFromSetFunction());
 	}

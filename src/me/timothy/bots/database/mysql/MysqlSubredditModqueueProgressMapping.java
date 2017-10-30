@@ -5,6 +5,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.sql.Types;
 
 import org.apache.logging.log4j.LogManager;
@@ -25,7 +26,8 @@ public class MysqlSubredditModqueueProgressMapping extends MysqlObjectWithIDMapp
 			new MysqlColumn(Types.BIT, "search_forward"),
 			new MysqlColumn(Types.INTEGER, "latest_handled_modaction_id"),
 			new MysqlColumn(Types.INTEGER, "newest_handled_modaction_id"),
-			new MysqlColumn(Types.TIMESTAMP, "updated_at")
+			new MysqlColumn(Types.TIMESTAMP, "updated_at"),
+			new MysqlColumn(Types.TIMESTAMP, "last_time_had_full_history")
 		});
 	}
 
@@ -34,12 +36,14 @@ public class MysqlSubredditModqueueProgressMapping extends MysqlObjectWithIDMapp
 		if(!a.isValid())
 			throw new IllegalArgumentException(a + " is not valid");
 		
+		if(a.lastTimeHadFullHistory != null) { a.lastTimeHadFullHistory.setNanos(0); }
+		
 		try {
 			PreparedStatement statement;
 			if(a.id > 0) {
-				statement = connection.prepareStatement("UPDATE " + table + " SET monitored_subreddit_id=?, search_forward=?, latest_handled_modaction_id=?, newest_handled_modaction_id=? WHERE id=?");
+				statement = connection.prepareStatement("UPDATE " + table + " SET monitored_subreddit_id=?, search_forward=?, latest_handled_modaction_id=?, newest_handled_modaction_id=?, last_time_had_full_history=? WHERE id=?");
 			}else {
-				statement = connection.prepareStatement("INSERT INTO " + table + " (monitored_subreddit_id, search_forward, latest_handled_modaction_id, newest_handled_modaction_id) VALUES (?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
+				statement = connection.prepareStatement("INSERT INTO " + table + " (monitored_subreddit_id, search_forward, latest_handled_modaction_id, newest_handled_modaction_id, last_time_had_full_history) VALUES (?, ?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
 			}
 			
 			int counter = 1;
@@ -53,6 +57,8 @@ public class MysqlSubredditModqueueProgressMapping extends MysqlObjectWithIDMapp
 				statement.setNull(counter++, Types.INTEGER);
 			else
 				statement.setInt(counter++, a.newestHandledModActionID);
+			
+			statement.setTimestamp(counter++, a.lastTimeHadFullHistory);
 			
 			if(a.id > 0) {
 				statement.setInt(counter++, a.id);
@@ -97,6 +103,43 @@ public class MysqlSubredditModqueueProgressMapping extends MysqlObjectWithIDMapp
 				fetchFromSetFunction());
 	}
 	
+	@Override
+	public boolean anySearchingForward() {
+		return fetchByAction("SELECT * FROM " + table + " WHERE search_forward=1 LIMIT 1", 
+				new PreparedStatementSetVarsUnsafe(),
+				resultHasRowFunction());
+	}
+
+	@Override
+	public boolean anyNullLastFullHistoryTime() {
+		return fetchByAction("SELECT * FROM " + table + " WHERE last_time_had_full_history IS NULL LIMIT 1", 
+				new PreparedStatementSetVarsUnsafe(),
+				resultHasRowFunction());
+	}
+
+	@Override
+	public Timestamp fetchLeastRecentFullHistoryTime() {
+		return fetchByAction("SELECT last_time_had_full_history FROM " + table + " WHERE last_time_had_full_history IS NOT NULL ORDER BY last_time_had_full_history ASC LIMIT 1", 
+				new PreparedStatementSetVarsUnsafe(),
+				new PreparedStatementFetchResult<Timestamp>() {
+					@Override
+					public Timestamp fetchResult(ResultSet set) throws SQLException {
+						if(!set.next())
+							return null;
+						return set.getTimestamp(1);
+					}
+				});
+	}
+
+	private PreparedStatementFetchResult<Boolean> resultHasRowFunction() {
+		return new PreparedStatementFetchResult<Boolean>() {
+			@Override
+			public Boolean fetchResult(ResultSet set) throws SQLException {
+				return set.next();
+			}
+		};
+	}
+	
 	/**
 	 * Fetch the SubredditModqueueProgress in the current row of the result set 
 	 * 
@@ -114,7 +157,7 @@ public class MysqlSubredditModqueueProgressMapping extends MysqlObjectWithIDMapp
 			newestBanHistoryID = null;
 		
 		return new SubredditModqueueProgress(set.getInt("id"), set.getInt("monitored_subreddit_id"), set.getBoolean("search_forward"), 
-				latestBanHistoryID, newestBanHistoryID, set.getTimestamp("updated_at"));
+				latestBanHistoryID, newestBanHistoryID, set.getTimestamp("updated_at"), set.getTimestamp("last_time_had_full_history"));
 	}
 
 	@Override
@@ -127,6 +170,7 @@ public class MysqlSubredditModqueueProgressMapping extends MysqlObjectWithIDMapp
 				+ "latest_handled_modaction_id INT NULL, "
 				+ "newest_handled_modaction_id INT NULL, "
 				+ "updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, "
+				+ "last_time_had_full_history TIMESTAMP NULL DEFAULT NULL, "
 				+ "PRIMARY KEY(id), "
 				+ "UNIQUE KEY(monitored_subreddit_id), "
 				+ "INDEX ind_subrmodqueprog_latestbh_id (latest_handled_modaction_id), "

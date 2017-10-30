@@ -2,6 +2,8 @@ package me.timothy.tests.database;
 
 import static org.junit.Assert.*;
 
+import java.sql.Timestamp;
+
 import org.junit.Test;
 
 import me.timothy.bots.database.MappingDatabase;
@@ -42,8 +44,8 @@ public class SubredditModqueueProgressMappingTest {
 	public void testSave() throws InterruptedException {
 		MonitoredSubreddit subA = new MonitoredSubreddit(-1, "johnssub", false, false, false);
 		database.getMonitoredSubredditMapping().save(subA);
-		
-		SubredditModqueueProgress subrModqueueProgr = new SubredditModqueueProgress(-1, subA.id, true, null, null, null);
+
+		SubredditModqueueProgress subrModqueueProgr = new SubredditModqueueProgress(-1, subA.id, true, null, null, null, null);
 		long now = System.currentTimeMillis();
 		database.getSubredditModqueueProgressMapping().save(subrModqueueProgr);
 		
@@ -96,7 +98,7 @@ public class SubredditModqueueProgressMappingTest {
 		fromDB = database.getSubredditModqueueProgressMapping().fetchForSubreddit(subB.id);
 		assertNull(fromDB);
 		
-		SubredditModqueueProgress subAProgr = new SubredditModqueueProgress(-1, subA.id, true, null, null, null);
+		SubredditModqueueProgress subAProgr = new SubredditModqueueProgress(-1, subA.id, true, null, null, null, null);
 		database.getSubredditModqueueProgressMapping().save(subAProgr);
 		
 		fromDB = database.getSubredditModqueueProgressMapping().fetchForSubreddit(subA.id);
@@ -106,7 +108,7 @@ public class SubredditModqueueProgressMappingTest {
 		fromDB = database.getSubredditModqueueProgressMapping().fetchForSubreddit(subB.id);
 		assertNull(fromDB);
 
-		SubredditModqueueProgress subBProgr = new SubredditModqueueProgress(-1, subB.id, true, null, null, null);
+		SubredditModqueueProgress subBProgr = new SubredditModqueueProgress(-1, subB.id, true, null, null, null, null);
 		database.getSubredditModqueueProgressMapping().save(subBProgr);
 		
 		assertNotEquals(subAProgr.id, subBProgr.id);
@@ -118,5 +120,106 @@ public class SubredditModqueueProgressMappingTest {
 		fromDB = database.getSubredditModqueueProgressMapping().fetchForSubreddit(subB.id);
 		assertNotNull(fromDB);
 		assertEquals(subBProgr, fromDB);
+	}
+	
+	@Test
+	public void testAnySearchingForward() {
+		MonitoredSubreddit subA = new MonitoredSubreddit(-1, "johnssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(subA);
+		
+		SubredditModqueueProgress subrModqueueProgr = new SubredditModqueueProgress(-1, subA.id, true, null, null, null, null);
+		database.getSubredditModqueueProgressMapping().save(subrModqueueProgr);
+		
+		assertTrue(database.getSubredditModqueueProgressMapping().anySearchingForward());
+		
+		subrModqueueProgr.searchForward = false;
+		database.getSubredditModqueueProgressMapping().save(subrModqueueProgr);
+		assertFalse(database.getSubredditModqueueProgressMapping().anySearchingForward());
+		
+		MonitoredSubreddit subB = new MonitoredSubreddit(-1, "paulssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(subB);
+		
+		SubredditModqueueProgress subBProg = new SubredditModqueueProgress(-1, subB.id, true, null, null, null, null);
+		database.getSubredditModqueueProgressMapping().save(subBProg);
+		assertTrue(database.getSubredditModqueueProgressMapping().anySearchingForward());
+		
+		subBProg.searchForward = false;
+		database.getSubredditModqueueProgressMapping().save(subBProg);
+		assertFalse(database.getSubredditModqueueProgressMapping().anySearchingForward());
+		
+		subrModqueueProgr.searchForward = true;
+		database.getSubredditModqueueProgressMapping().save(subrModqueueProgr);
+		assertTrue(database.getSubredditModqueueProgressMapping().anySearchingForward());
+		
+		subBProg.searchForward = true;
+		database.getSubredditModqueueProgressMapping().save(subBProg);
+		assertTrue(database.getSubredditModqueueProgressMapping().anySearchingForward());
+	}
+	
+	@Test
+	public void testAnyNullTime() {
+		MonitoredSubreddit subA = new MonitoredSubreddit(-1, "johnssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(subA);
+		
+		SubredditModqueueProgress subrModqueueProgr = new SubredditModqueueProgress(-1, subA.id, true, null, null, null, null);
+		database.getSubredditModqueueProgressMapping().save(subrModqueueProgr);
+		
+		assertTrue(database.getSubredditModqueueProgressMapping().anyNullLastFullHistoryTime());
+		
+		long now = System.currentTimeMillis();
+		subrModqueueProgr.lastTimeHadFullHistory = new Timestamp(now);
+		database.getSubredditModqueueProgressMapping().save(subrModqueueProgr);
+		assertFalse(database.getSubredditModqueueProgressMapping().anyNullLastFullHistoryTime());
+		
+		MonitoredSubreddit subB = new MonitoredSubreddit(-1, "paulssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(subB);
+		
+		SubredditModqueueProgress subBProg = new SubredditModqueueProgress(-1, subB.id, true, null, null, null, null);
+		database.getSubredditModqueueProgressMapping().save(subBProg);
+		assertTrue(database.getSubredditModqueueProgressMapping().anyNullLastFullHistoryTime());
+		
+		subBProg.lastTimeHadFullHistory = new Timestamp(now);
+		database.getSubredditModqueueProgressMapping().save(subBProg);
+		assertFalse(database.getSubredditModqueueProgressMapping().anyNullLastFullHistoryTime());
+		
+		subrModqueueProgr.lastTimeHadFullHistory = null;
+		database.getSubredditModqueueProgressMapping().save(subrModqueueProgr);
+		assertTrue(database.getSubredditModqueueProgressMapping().anyNullLastFullHistoryTime());
+		
+		subBProg.lastTimeHadFullHistory = null;
+		database.getSubredditModqueueProgressMapping().save(subBProg);
+		assertTrue(database.getSubredditModqueueProgressMapping().anyNullLastFullHistoryTime());
+	}
+	
+	@Test
+	public void testFetchLeastRecentHadFullHistory() {
+		MonitoredSubreddit subA = new MonitoredSubreddit(-1, "johnssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(subA);
+		
+		SubredditModqueueProgress subrModqueueProgr = new SubredditModqueueProgress(-1, subA.id, true, null, null, null, null);
+		database.getSubredditModqueueProgressMapping().save(subrModqueueProgr);
+		
+		assertNull(database.getSubredditModqueueProgressMapping().fetchLeastRecentFullHistoryTime());
+		
+		long now = (System.currentTimeMillis() / 1000) * 1000;
+		subrModqueueProgr.lastTimeHadFullHistory = new Timestamp(now);
+		database.getSubredditModqueueProgressMapping().save(subrModqueueProgr);
+		
+		assertEquals(now, database.getSubredditModqueueProgressMapping().fetchLeastRecentFullHistoryTime().getTime());
+		
+		long earlier = now - 10000;
+
+		MonitoredSubreddit subB = new MonitoredSubreddit(-1, "paulssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(subB);
+		
+		SubredditModqueueProgress subBProg = new SubredditModqueueProgress(-1, subB.id, true, null, null, null, new Timestamp(earlier));
+		database.getSubredditModqueueProgressMapping().save(subBProg);
+
+		assertEquals(earlier, database.getSubredditModqueueProgressMapping().fetchLeastRecentFullHistoryTime().getTime());
+		
+		subBProg.lastTimeHadFullHistory = null;
+		database.getSubredditModqueueProgressMapping().save(subBProg);
+
+		assertEquals(now, database.getSubredditModqueueProgressMapping().fetchLeastRecentFullHistoryTime().getTime());
 	}
 }

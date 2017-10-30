@@ -11,8 +11,8 @@ import java.util.stream.Collectors;
 import org.apache.logging.log4j.Level;
 import org.json.simple.parser.ParseException;
 
-import me.timothy.bots.memory.PropagateResult;
 import me.timothy.bots.memory.ModmailPMInformation;
+import me.timothy.bots.memory.PropagateResult;
 import me.timothy.bots.memory.UserBanInformation;
 import me.timothy.bots.memory.UserPMInformation;
 import me.timothy.bots.models.BanHistory;
@@ -106,6 +106,7 @@ public class USLBotDriver extends BotDriver {
 	 * and that the subreddit is completely scanned.
 	 * 
 	 * @param sub the subreddit to scan
+	 * @return true if we have the entire current history of the subreddit, false otherwise
 	 */
 	protected void scanSubForBans(MonitoredSubreddit sub) {
 		USLDatabase db = (USLDatabase) database;
@@ -114,7 +115,7 @@ public class USLBotDriver extends BotDriver {
 		
 		if(progress == null) {
 			logger.warn("SubredditModqueueProgress was not found for subreddit " + sub.subreddit + ", autogenerating!");
-			progress = new SubredditModqueueProgress(-1, sub.id, true, null, null, null);
+			progress = new SubredditModqueueProgress(-1, sub.id, true, null, null, null, null);
 			db.getSubredditModqueueProgressMapping().save(progress);
 		}
 		
@@ -123,12 +124,18 @@ public class USLBotDriver extends BotDriver {
 			if(progress.searchForward) {
 				scanSubForBansForwardSearch(sub, progress);
 			}else {
+				long now = System.currentTimeMillis();
 				boolean finished = scanSubForBansReverseSearch(sub, progress);
 				
-				if(finished)
-					break;
+				if(finished) {
+					progress.lastTimeHadFullHistory = new Timestamp(now);
+					db.getSubredditModqueueProgressMapping().save(progress);
+				}
 			}
 		}
+		
+		progress.lastTimeHadFullHistory = null;
+		db.getSubredditModqueueProgressMapping().save(progress);
 	}
 	
 	/**
@@ -161,9 +168,10 @@ public class USLBotDriver extends BotDriver {
 			}
 			
 			ModAction action = (ModAction) child;
-			HandledModAction handled = db.getHandledModActionMapping().fetchByModActionID(action.id()); 
+			String prefix = "Child " + i + " [id=" + action.id() + "] ";
+			HandledModAction handled = db.getHandledModActionMapping().fetchByModActionID(action.id());
 			if(handled != null) {
-				logger.trace("Child " + i + " we had already seen");
+				logger.trace(prefix + " we had already seen");
 				continue;
 			}else {
 				handled = new HandledModAction(-1, sub.id, action.id(), new Timestamp((long)(action.createdUTC() * 1000)));
@@ -171,15 +179,15 @@ public class USLBotDriver extends BotDriver {
 				db.getHandledModActionMapping().save(handled);
 	
 				if(action.action().equalsIgnoreCase("banuser")) {
-					logger.trace("Child " + i + " was a new ban, saving it then will dump it");
+					logger.trace(prefix + " was a new ban, saving it then will dump it");
 					BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action, handled);
 					logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
 				}else if(action.action().equalsIgnoreCase("unbanuser")) {
-					logger.trace("Child " + i + " was a new unban, saving it then will dump it");
+					logger.trace(prefix + " was a new unban, saving it then will dump it");
 					UnbanHistory unbanHistory = createAndSaveUnbanHistoryFromAction(db, sub, action, handled);
 					logger.printf(Level.INFO, "Detected new unban: %s", unbanHistory.toString());
 				}else {
-					logger.trace("Child " + i + " was a " + action.action() + "; ignoring it");
+					logger.trace(prefix + " was a " + action.action() + "; ignoring it");
 				}
 			}
 
@@ -407,9 +415,15 @@ public class USLBotDriver extends BotDriver {
 	 * Uses the USLBanHistoryPropagator to decide how to propagate for each subreddit.
 	 */
 	protected void propagateBans() {
+		USLDatabase db = (USLDatabase)database;
+		if(db.getSubredditModqueueProgressMapping().anyNullLastFullHistoryTime()) {
+			logger.debug("Not propagating bans right now, still have some subreddits not up-to-date");
+		}
+		
+		Timestamp dontPropagateLaterThan = db.getSubredditModqueueProgressMapping().fetchLeastRecentFullHistoryTime();
 		for(MonitoredSubreddit subreddit : monitoredSubreddits) {
 			logger.trace("Propagating bans to " + subreddit.subreddit);
-			propagateBansForSubreddit(subreddit);
+			propagateBansForSubreddit(subreddit, dontPropagateLaterThan);
 		}
 	}
 	
@@ -418,8 +432,9 @@ public class USLBotDriver extends BotDriver {
 	 * in order to ensure no work is duplicated and that all bans are propagated to the subreddit.
 	 * 
 	 * @param subreddit the subreddit
+	 * @param dontPropagateLaterThan timestamp to avoid propagating later than
 	 */
-	protected void propagateBansForSubreddit(MonitoredSubreddit subreddit) {
+	protected void propagateBansForSubreddit(MonitoredSubreddit subreddit, Timestamp dontPropagateLaterThan) {
 		USLDatabase db = (USLDatabase)database;
 		
 		SubredditPropagateStatus status = db.getSubredditPropagateStatusMapping().fetchForSubreddit(subreddit.id);
@@ -429,13 +444,6 @@ public class USLBotDriver extends BotDriver {
 			status = new SubredditPropagateStatus(-1, subreddit.id, null, null);
 			db.getSubredditPropagateStatusMapping().save(status);
 		}
-		
-		SubredditModqueueProgress progress = db.getSubredditModqueueProgressMapping().fetchForSubreddit(subreddit.id);
-		if(progress.searchForward) {
-			logger.trace("Not propagating bans for " + subreddit.subreddit + "; still generating history");
-			return;
-		}
-		
 		
 		// we will break out early after 250 ban histories or 3 ban histories
 		// requiring reddit interactions, whichever comes first
@@ -459,7 +467,7 @@ public class USLBotDriver extends BotDriver {
 			}
 			// we use 1 week from epoch here because it acts really funny near 0
 			Timestamp after = status.latestPropagatedActionTime == null ? new Timestamp((long)(6.048e+8)) : status.latestPropagatedActionTime;
-			handledActionsToPropagate.addAll(db.getHandledModActionMapping().fetchLatest(after, 50));
+			handledActionsToPropagate.addAll(db.getHandledModActionMapping().fetchLatest(after, dontPropagateLaterThan, 50));
 			
 			if(handledActionsToPropagate.isEmpty()) {
 				logger.trace("Out of things to propagate for " + subreddit.subreddit);

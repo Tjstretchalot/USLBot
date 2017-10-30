@@ -1,0 +1,12 @@
+if you do any of the following:
+
+- add a monitored subreddit
+- add a subscribed hashtag
+
+you must run something of the form:
+
+LOCK TABLES ban_histories, fullnames, handled_at_timestamps, handled_modactions, monitored_subreddits, persons, responses, subreddit_modqueue_progress, subreddit_propagate_status, subscribed_hashtags, unban_histories WRITE;
+insert into monitored_subreddits (subreddit, silent, read_only, write_only) values('sub', 0, 0, 0);
+insert into subscribed_hashtags (monitored_subreddit_id, hashtag) values(LAST_INSERT_ID(), '#scammer');
+delete from subreddit_propagate_status;
+UNLOCK TABLES;

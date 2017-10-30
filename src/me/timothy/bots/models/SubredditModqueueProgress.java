@@ -23,6 +23,8 @@ public class SubredditModqueueProgress {
 	public Integer newestHandledModActionID;
 	/** When this was last updated. */
 	public Timestamp updatedAt;
+	/** The last time when we had a complete history of this history, or null */
+	public Timestamp lastTimeHadFullHistory;
 	
 	/**
 	 * @param id id (or -1 if not in database yet)
@@ -31,15 +33,17 @@ public class SubredditModqueueProgress {
 	 * @param latestHandledModActionID the latest/OLDEST HandledModAction id that was retrieved from this subreddit. may be null
 	 * @param newestHandledModActionID the newest/YOUNGEST HandledModAction id that was retrieved from this subreddit. may be null
 	 * @param updatedAt when this was last updated
+	 * @param lastTimeHadFullHistory the last time that we had a full history of this subreddit
 	 */
 	public SubredditModqueueProgress(int id, int monitoredSubredditID, boolean searchForward, Integer latestHandledModActionID,
-			Integer newestHandledModActionID, Timestamp updatedAt) {
+			Integer newestHandledModActionID, Timestamp updatedAt, Timestamp lastTimeHadFullHistory) {
 		this.id = id;
 		this.monitoredSubredditID = monitoredSubredditID;
 		this.searchForward = searchForward;
 		this.latestHandledModActionID = latestHandledModActionID;
 		this.newestHandledModActionID = newestHandledModActionID;
 		this.updatedAt = updatedAt;
+		this.lastTimeHadFullHistory = lastTimeHadFullHistory;
 	}
 	
 	/**
@@ -63,6 +67,7 @@ public class SubredditModqueueProgress {
 		result = prime * result + ((newestHandledModActionID == null) ? 0 : newestHandledModActionID.hashCode());
 		result = prime * result + (searchForward ? 1231 : 1237);
 		result = prime * result + ((updatedAt == null) ? 0 : updatedAt.hashCode());
+		result = prime * result + ((lastTimeHadFullHistory == null) ? 0 : lastTimeHadFullHistory.hashCode());
 		return result;
 	}
 
@@ -96,6 +101,11 @@ public class SubredditModqueueProgress {
 				return false;
 		} else if (!updatedAt.equals(other.updatedAt))
 			return false;
+		if (lastTimeHadFullHistory == null) {
+			if (other.lastTimeHadFullHistory != null)
+				return false;
+		} else if (!lastTimeHadFullHistory.equals(other.lastTimeHadFullHistory))
+			return false;
 		return true;
 	}
 
@@ -103,6 +113,7 @@ public class SubredditModqueueProgress {
 	public String toString() {
 		return "SubredditModqueueProgress [id=" + id + ", monitoredSubredditID=" + monitoredSubredditID
 				+ ", searchForward=" + searchForward + ", latestHandledModActionID=" + latestHandledModActionID
-				+ ", newestHandledModActionID=" + newestHandledModActionID + ", updatedAt=" + updatedAt + "]";
+				+ ", newestHandledModActionID=" + newestHandledModActionID + ", updatedAt=" + updatedAt + ""
+				+ ", lastTimeHadFullHistory=" + lastTimeHadFullHistory + "]";
 	}
 }

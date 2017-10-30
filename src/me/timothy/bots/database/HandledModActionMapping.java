@@ -34,13 +34,14 @@ public interface HandledModActionMapping extends ObjectMapping<HandledModAction>
 	public List<HandledModAction> fetchByTimestamp(Timestamp timestamp);
 	
 	/**
-	 * Fetch handled mod actions after the specified timestamp
+	 * Fetch handled mod actions between the specified timestamps
 	 * 
 	 * @param after after time
+	 * @param before before time
 	 * @param num number
 	 * @return up to num handled mod actions strictly later than after
 	 */
-	public List<HandledModAction> fetchLatest(Timestamp after, int num);
+	public List<HandledModAction> fetchLatest(Timestamp after, Timestamp before, int num);
 	
 	/**
 	 * Reddit only uses second-precision on its result, so theres a very
