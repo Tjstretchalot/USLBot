@@ -841,6 +841,50 @@ public class PropagatorTest {
 		assertTrue(result.userPMs.isEmpty());
 	}
 
+	@Test
+	public void testDoesntBanUnbannedUsers() {
+		initResponses();
+		
+		Person john = database.getPersonMapping().fetchOrCreateByUsername("john");
+		Person eric = database.getPersonMapping().fetchOrCreateByUsername("eric");
+		
+		MonitoredSubreddit johnsSub = new MonitoredSubreddit(-1, "johnssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(johnsSub);
+		
+		MonitoredSubreddit paulsSub = new MonitoredSubreddit(-1, "paulssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(paulsSub);
+		
+		long now = System.currentTimeMillis();
+		long oneDayInMS = 1000 * 60 * 60 * 24;
+		
+		SubscribedHashtag paulTag = new SubscribedHashtag(-1, paulsSub.id, "#scammer", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(paulTag);
+		
+		long tenDaysAgo = now - (10 * oneDayInMS);
+		HandledModAction johnBansEricHMA = new HandledModAction(-1, johnsSub.id, "ModAction_1", new Timestamp(tenDaysAgo));
+		database.getHandledModActionMapping().save(johnBansEricHMA);
+		
+		BanHistory johnBansEricBH = new BanHistory(-1, john.id, eric.id, johnBansEricHMA.id, "#scammer", "permanent");
+		database.getBanHistoryMapping().save(johnBansEricBH);
+		
+		long fiveDaysAgo = now - (5 * oneDayInMS);
+		HandledModAction johnUnbansEricHMA = new HandledModAction(-1, johnsSub.id, "ModAction_2", new Timestamp(fiveDaysAgo));
+		database.getHandledModActionMapping().save(johnUnbansEricHMA);
+		
+		UnbanHistory johnUnbansEricUBH = new UnbanHistory(-1, john.id, eric.id, johnUnbansEricHMA.id);
+		database.getUnbanHistoryMapping().save(johnUnbansEricUBH);
+		
+		PropagateResult result = propagator.propagateBan(johnsSub, johnBansEricHMA, johnBansEricBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		
+		result = propagator.propagateBan(paulsSub, johnBansEricHMA, johnBansEricBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+	}
+	
 	@After 
 	public void cleanUp() {
 		database.disconnect();

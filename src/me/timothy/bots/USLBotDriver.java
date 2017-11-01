@@ -305,8 +305,9 @@ public class USLBotDriver extends BotDriver {
 			boolean alreadySaw = false;
 			HandledModAction handled = db.getHandledModActionMapping().fetchByModActionID(action.id());
 			
+			String prefix = "Child " + i  + " [id=" + action.id() + "]";
 			if (handled != null) {
-				logger.trace("Child " + i + " we had already seen");
+				logger.trace(prefix + " we had already seen");
 				alreadySaw = true;
 			}
 			
@@ -316,15 +317,15 @@ public class USLBotDriver extends BotDriver {
 				
 				
 				if(action.action().equalsIgnoreCase("banuser")) {
-					logger.trace("Child " + i + " was a ban, saving then dumping");
+					logger.trace(prefix + " was a ban, saving then dumping");
 					BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action, handled);
 					logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
 				}else if(action.action().equalsIgnoreCase("unbanuser")) {
-					logger.trace("Child " + i + " was an unban, saving then dumping");
+					logger.trace(prefix + " was an unban, saving then dumping");
 					UnbanHistory unbanHistory = createAndSaveUnbanHistoryFromAction(db, sub, action, handled);
 					logger.printf(Level.INFO, "Detected new unban: %s", unbanHistory.toString());
 				}else {
-					logger.trace("Child " + i + " was a " + action.action() + "; ignoring");
+					logger.trace(prefix + " was a " + action.action() + "; ignoring");
 				}
 			}
 			
@@ -358,7 +359,7 @@ public class USLBotDriver extends BotDriver {
 				return true; // got an empty listing. no new bans since last check
 			}
 			
-			logger.trace("Reddit gave us before=null, so using the one with the latest timestamp " + timeToPretty(mostRecentHandled.occurredAt.getTime()));
+			logger.trace("Reddit gave us before=null, so using the one with the most recent timestamp " + timeToPretty(mostRecentHandled.occurredAt.getTime()) + " (id=" + mostRecentHandled.modActionID +")");
 			progress.newestHandledModActionID = mostRecentHandled.id;
 			db.getSubredditModqueueProgressMapping().save(progress);
 			return true;
@@ -421,8 +422,6 @@ public class USLBotDriver extends BotDriver {
 			logger.debug("Not propagating bans right now, still have some subreddits not up-to-date");
 			return;
 		}
-		
-		System.exit(0);
 		
 		Timestamp dontPropagateLaterThan = db.getSubredditModqueueProgressMapping().fetchLeastRecentFullHistoryTime();
 		for(MonitoredSubreddit subreddit : monitoredSubreddits) {

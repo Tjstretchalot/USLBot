@@ -75,8 +75,12 @@ public class USLPropagator {
 	 */
 	public PropagateResult propagateBan(MonitoredSubreddit subreddit, HandledModAction hma, BanHistory history)
 	{
+		Person banned = database.getPersonMapping().fetchByID(history.bannedPersonID);
 		Person mod = database.getPersonMapping().fetchByID(history.modPersonID);
 		if(mod.username.equalsIgnoreCase(config.getProperty("user.username"))) 
+			return new PropagateResult(subreddit, hma);
+		
+		if(banned.username.equalsIgnoreCase("[deleted]"))
 			return new PropagateResult(subreddit, hma);
 		
 		if(mod.username.equalsIgnoreCase("Guzbot3000"))
@@ -87,6 +91,14 @@ public class USLPropagator {
 		
 		if(hma.monitoredSubredditID == subreddit.id)
 			return new PropagateResult(subreddit, hma);
+
+		UnbanHistory mostRecentUnbanOnBannedSubreddit = database.getUnbanHistoryMapping().fetchUnbanHistoryByPersonAndSubreddit(history.bannedPersonID, hma.monitoredSubredditID);
+		if(mostRecentUnbanOnBannedSubreddit != null) {
+			HandledModAction mostRecentUnbanOnBannedSubredditHMA = database.getHandledModActionMapping().fetchByID(mostRecentUnbanOnBannedSubreddit.handledModActionID);
+			if(mostRecentUnbanOnBannedSubredditHMA.occurredAt.after(hma.occurredAt)) {
+				return new PropagateResult(subreddit, hma);
+			}
+		}
 		
 		MonitoredSubreddit from = database.getMonitoredSubredditMapping().fetchByID(hma.monitoredSubredditID);
 		if(from.readOnly)
@@ -96,6 +108,9 @@ public class USLPropagator {
 			return propagateBanChangedDuration(subreddit, hma, history, mod, from);
 
 		if(!history.banDetails.equalsIgnoreCase("permanent"))
+			return new PropagateResult(subreddit, hma);
+		
+		if(history.banDescription == null)
 			return new PropagateResult(subreddit, hma);
 		
 		List<SubscribedHashtag> relevant = new ArrayList<>();
@@ -111,7 +126,6 @@ public class USLPropagator {
 			return new PropagateResult(subreddit, hma);
 		String tagsStringified = String.join(", ", relevant.stream().map(tag -> tag.hashtag).collect(Collectors.toList()));
 		
-		Person banned = database.getPersonMapping().fetchByID(history.bannedPersonID);
 
 		List<UserBanInformation> bans = new ArrayList<>();
 		List<ModmailPMInformation> modmailPms = new ArrayList<>();
@@ -198,7 +212,8 @@ public class USLPropagator {
 		}
 		
 		if(mostRecentNonDurationChangingBanOlderThanHistory == null) {
-			throw new RuntimeException("Got a duration-changing ban history without a corresponding ban to change duration!");
+			logger.warn("Got a duration-changing ban history without a corresponding ban to change duration!");
+			return new PropagateResult(subreddit, hma);
 		}
 		
 		BanHistory fakeBanHistory = new BanHistory(-1, history.modPersonID, history.bannedPersonID, 
