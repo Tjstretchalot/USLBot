@@ -23,6 +23,7 @@ import me.timothy.bots.models.Person;
 import me.timothy.bots.models.Response;
 import me.timothy.bots.models.SubscribedHashtag;
 import me.timothy.bots.models.UnbanHistory;
+import me.timothy.bots.models.UnbanRequest;
 import me.timothy.tests.database.mysql.MysqlTestUtils;
 
 /**
@@ -85,6 +86,7 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 	}
 	
 	/**
@@ -122,12 +124,14 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(ericsSub, hma, paulBanningJohn);
 		assertNotNull(result);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());	
+		assertFalse(result.postpone);
 	}
 	
 	/**
@@ -175,12 +179,14 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(secondSub, hma, botsBan);
 		assertNotNull(result);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());	
+		assertFalse(result.postpone);
 	}
 	
 	
@@ -240,6 +246,7 @@ public class PropagatorTest {
 		assertEquals(expModmailBody, result.modmailPMs.get(0).body);
 		assertEquals(expModmailTitle, result.modmailPMs.get(0).title);
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 	}
 	
 	/**
@@ -289,6 +296,7 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(ericsSub, hma, paulBansAdam);
 		assertEquals(1, result.bans.size());
@@ -296,6 +304,7 @@ public class PropagatorTest {
 		assertEquals(1, result.modmailPMs.size());
 		assertEquals(ericsSub, result.modmailPMs.get(0).subreddit);
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 	}
 	
 	/**
@@ -336,6 +345,7 @@ public class PropagatorTest {
 		assertEquals(1, result.modmailPMs.size());
 		assertEquals(johnsSub, result.modmailPMs.get(0).subreddit);
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 
 		HandledModAction hma2 = new HandledModAction(-1, paulsSub.id, "ModAction_ID2", new Timestamp(System.currentTimeMillis()));
 		database.getHandledModActionMapping().save(hma2);
@@ -347,6 +357,7 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 	}
 	
 	/**
@@ -381,6 +392,7 @@ public class PropagatorTest {
 		assertEquals(eric, result.bans.get(0).person);
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 	}
 	
 	/**
@@ -413,6 +425,7 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 	}
 	
 	/**
@@ -445,6 +458,7 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 	}
 	
 	@Test
@@ -492,6 +506,7 @@ public class PropagatorTest {
 				"adamssub, adam, #potato, eric, paulssub, true, true, true, #potato, - " + nowPretty + " - paul banned eric for permanent - no tags here, paul, 1, 0",
 				userPM.body
 				);
+		assertFalse(result.postpone);
 	}
 	
 	@Test
@@ -526,6 +541,7 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(ericsSub, paulBansJohnHMA, paulBansJohnBH);
 		assertEquals(1, result.bans.size());
@@ -535,6 +551,7 @@ public class PropagatorTest {
 		assertEquals(john, result.bans.get(0).person);
 		assertEquals(ericsSub, result.bans.get(0).subreddit);
 		assertEquals(ericsSub, result.modmailPMs.get(0).subreddit);
+		assertFalse(result.postpone);
 		
 		HandledModAction botBansJohnEricsSubHMA = new HandledModAction(-1, ericsSub.id, "ModAction_ID2", new Timestamp(now));
 		database.getHandledModActionMapping().save(botBansJohnEricsSubHMA);
@@ -546,21 +563,25 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(ericsSub, botBansJohnEricsSubHMA, botBansJohnEricsSubBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(paulsSub, paulBansJohnHMA, paulBansJohnBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(ericsSub, paulBansJohnHMA, paulBansJohnBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 	}
 	
 	@Test
@@ -633,80 +654,95 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(johnsSub, ellasOldBanHMA, ellasOldBanBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(ellasSub, ellasOldBanHMA, ellasOldBanBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 
 		
 		result = propagator.propagateUnban(usl, ellasOldUnbanHMA, ellasOldUnbanUBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateUnban(johnsSub, ellasOldUnbanHMA, ellasOldUnbanUBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateUnban(ellasSub, ellasOldUnbanHMA, ellasOldUnbanUBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		
 		result = propagator.propagateBan(usl, johnsOriginalBanHMA, johnsOriginalBanBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(johnsSub, johnsOriginalBanHMA, johnsOriginalBanBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(ellasSub, johnsOriginalBanHMA, johnsOriginalBanBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 
 		
 		result = propagator.propagateBan(usl, guzbotsPropagateToUSLHMA, guzbotsBanOnUSLBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(johnsSub, guzbotsPropagateToUSLHMA, guzbotsBanOnUSLBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(ellasSub, guzbotsPropagateToUSLHMA, guzbotsBanOnUSLBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 
 		result = propagator.propagateBan(usl, guzbotsPropagateToEllaHMA, guzbotsPropagateToEllaBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(johnsSub, guzbotsPropagateToEllaHMA, guzbotsPropagateToEllaBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(ellasSub, guzbotsPropagateToEllaHMA, guzbotsPropagateToEllaBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 	}
 	
 	@Test
@@ -759,16 +795,19 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(ellasSub, ericBansPaulTemporarilyHMA, ericBansPaulTemporarilyBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(mySub, ericBansPaulTemporarilyHMA, ericBansPaulTemporarilyBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		
 		HandledModAction ericBansJohnTemporarilyHMA = new HandledModAction(-1, ericsSub.id, "ModAction_ID2", new Timestamp(twentyDaysAgo));
@@ -781,16 +820,19 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(ellasSub, ericBansJohnTemporarilyHMA, ericBansJohnTemporarilyBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(mySub, ericBansJohnTemporarilyHMA, ericBansJohnTemporarilyBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		
 		HandledModAction ericChangesPaulsBanToPermanentHMA = new HandledModAction(-1, ericsSub.id, "ModAction_ID3", new Timestamp(fifteenDaysAgo));
@@ -803,6 +845,7 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(ellasSub, ericChangesPaulsBanToPermanentHMA, ericChangesPaulsBanToPermanentBH);
 		assertEquals(1, result.bans.size());
@@ -810,6 +853,7 @@ public class PropagatorTest {
 		assertEquals(1, result.modmailPMs.size());
 		assertEquals(ellasSub, result.modmailPMs.get(0).subreddit);
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(mySub, ericChangesPaulsBanToPermanentHMA, ericChangesPaulsBanToPermanentBH);
 		assertEquals(1, result.bans.size());
@@ -817,6 +861,7 @@ public class PropagatorTest {
 		assertEquals(1, result.modmailPMs.size());
 		assertEquals(mySub, result.modmailPMs.get(0).subreddit);
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		
 		HandledModAction ericChangesJohnBanTo180DaysHMA = new HandledModAction(-1, ericsSub.id, "ModAction_ID4", new Timestamp(tenDaysAgo));
@@ -829,16 +874,19 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(ellasSub, ericChangesJohnBanTo180DaysHMA, ericChangesJohnBanTo180DaysBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(mySub, ericChangesJohnBanTo180DaysHMA, ericChangesJohnBanTo180DaysBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 	}
 
 	@Test
@@ -878,11 +926,94 @@ public class PropagatorTest {
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 		
 		result = propagator.propagateBan(paulsSub, johnBansEricHMA, johnBansEricBH);
 		assertTrue(result.bans.isEmpty());
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
+	}
+	
+	@Test
+	public void testDoesntBanIfLaterUnbanRequest() {
+		initResponses();
+		
+		Person john = database.getPersonMapping().fetchOrCreateByUsername("john");
+		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
+		
+		long now = System.currentTimeMillis();
+		long oneDayInMS = 1000 * 60 * 60 * 24;
+		
+		long fifteenDaysAgo = now - (oneDayInMS * 15);
+		long tenDaysAgo = now - (oneDayInMS * 10);
+		long fiveDaysAgo = now - (oneDayInMS * 5);
+		
+		MonitoredSubreddit johnsSub = new MonitoredSubreddit(-1, "johnssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(johnsSub);
+		
+		MonitoredSubreddit ericsSub = new MonitoredSubreddit(-1, "ericssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(ericsSub);
+		
+		SubscribedHashtag ericTag = new SubscribedHashtag(-1, ericsSub.id, "#scammer", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(ericTag);
+		
+		
+		HandledModAction johnBansPaulHMA = new HandledModAction(-1, johnsSub.id, "ModAction_ID1", new Timestamp(tenDaysAgo));
+		database.getHandledModActionMapping().save(johnBansPaulHMA);
+		
+		BanHistory johnBansPaulBH = new BanHistory(-1, john.id, paul.id, johnBansPaulHMA.id, "#scammer", "permanent");
+		database.getBanHistoryMapping().save(johnBansPaulBH);
+		
+		PropagateResult result = propagator.propagateBan(ericsSub, johnBansPaulHMA, johnBansPaulBH);
+		assertEquals(1, result.bans.size());
+		assertEquals(paul, result.bans.get(0).person);
+		assertEquals(ericsSub, result.bans.get(0).subreddit);
+		assertEquals(1, result.modmailPMs.size());
+		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
+		
+		UnbanRequest unbanRequest = new UnbanRequest(-1, john.id, paul.id, new Timestamp(fiveDaysAgo), new Timestamp(now), false);
+		database.getUnbanRequestMapping().save(unbanRequest);
+		
+		result = propagator.propagateBan(ericsSub, johnBansPaulHMA, johnBansPaulBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
+		
+		unbanRequest.createdAt = new Timestamp(fifteenDaysAgo);
+		database.getUnbanRequestMapping().save(unbanRequest);
+		
+		result = propagator.propagateBan(ericsSub, johnBansPaulHMA, johnBansPaulBH);
+		assertEquals(1, result.bans.size());
+		assertEquals(paul, result.bans.get(0).person);
+		assertEquals(ericsSub, result.bans.get(0).subreddit);
+		assertEquals(1, result.modmailPMs.size());
+		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
+		
+		unbanRequest.invalid = true;
+		unbanRequest.createdAt = new Timestamp(fiveDaysAgo);
+		database.getUnbanRequestMapping().save(unbanRequest);
+
+		result = propagator.propagateBan(ericsSub, johnBansPaulHMA, johnBansPaulBH);
+		assertEquals(1, result.bans.size());
+		assertEquals(paul, result.bans.get(0).person);
+		assertEquals(ericsSub, result.bans.get(0).subreddit);
+		assertEquals(1, result.modmailPMs.size());
+		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
+		
+		unbanRequest.invalid = false;
+		unbanRequest.handledAt = null;
+		database.getUnbanRequestMapping().save(unbanRequest);
+
+		result = propagator.propagateBan(ericsSub, johnBansPaulHMA, johnBansPaulBH);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		assertTrue(result.postpone);
 	}
 	
 	@After 

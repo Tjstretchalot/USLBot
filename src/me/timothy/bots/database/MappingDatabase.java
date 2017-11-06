@@ -18,4 +18,7 @@ public interface MappingDatabase {
 	public SubredditPropagateStatusMapping getSubredditPropagateStatusMapping();
 	public UnbanHistoryMapping getUnbanHistoryMapping();
 	public HandledAtTimestampMapping getHandledAtTimestampMapping();
+	public TraditionalScammerMapping getTraditionalScammerMapping();
+	public UnbanRequestMapping getUnbanRequestMapping();
+	public SubredditTraditionalListStatusMapping getSubredditTraditionalListStatusMapping();
 }

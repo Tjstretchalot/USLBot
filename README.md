@@ -38,8 +38,9 @@ Under user.properties you can use the following:
     password=test
     appClientID=test
     appClientSecret=test
+    main_sub=test
 
-It is not important what information you put in this file, unless the test you are running specifies otherwise (unusual).
+It is not important what information you put in this file, unless the test you are running specifies otherwise (unusual). Do not use the following usernames: paul, eric, emma, ella, john, or any other 4-letter name in the testing properties. Do not use any of the following subreddits for main_sub paulssub, ericssub, emmassub, or any other 4-letter name followed by "ssub". These are used as filler subreddits for the tests.
     
 Under database.properties it will have the following format:
 

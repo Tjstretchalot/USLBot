@@ -154,6 +154,15 @@ public class MysqlBanHistoryMapping extends MysqlObjectWithIDMapping<BanHistory>
 					
 				});
 	}
+
+	@Override
+	public List<BanHistory> fetchBanHistoriesByPerson(int bannedPersonId) {
+		return fetchByAction("SELECT * FROM " + table + " WHERE banned_person_id=?",
+				new PreparedStatementSetVarsUnsafe(
+						new MysqlTypeValueTuple(Types.INTEGER, bannedPersonId)
+						), 
+				fetchListFromSetFunction());
+	}
 	
 	@Override
 	protected BanHistory fetchFromSet(ResultSet set) throws SQLException {

@@ -43,6 +43,15 @@ public interface BanHistoryMapping extends ObjectMapping<BanHistory> {
 	public BanHistory fetchBanHistoryByPersonAndSubreddit(int bannedPersonId, int monitoredSubredditId);
 	
 	/**
+	 * Fetch all the time we know of that the specified person was banned
+	 * on one of our monitored subreddits
+	 * 
+	 * @param bannedPersonId the person
+	 * @return when he was banned
+	 */
+	public List<BanHistory> fetchBanHistoriesByPerson(int bannedPersonId);
+	
+	/**
 	 * Fetches all ban histories with the specified banned person on the specified subreddit.
 	 * 
 	 * @param bannedPersonId banned person id

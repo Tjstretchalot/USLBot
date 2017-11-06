@@ -17,8 +17,11 @@ import me.timothy.bots.database.ResponseMapping;
 import me.timothy.bots.database.SchemaValidator;
 import me.timothy.bots.database.SubredditModqueueProgressMapping;
 import me.timothy.bots.database.SubredditPropagateStatusMapping;
+import me.timothy.bots.database.SubredditTraditionalListStatusMapping;
 import me.timothy.bots.database.SubscribedHashtagMapping;
+import me.timothy.bots.database.TraditionalScammerMapping;
 import me.timothy.bots.database.UnbanHistoryMapping;
+import me.timothy.bots.database.UnbanRequestMapping;
 import me.timothy.bots.database.mysql.MysqlBanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlFullnameMapping;
 import me.timothy.bots.database.mysql.MysqlHandledAtTimestampMapping;
@@ -28,8 +31,11 @@ import me.timothy.bots.database.mysql.MysqlPersonMapping;
 import me.timothy.bots.database.mysql.MysqlResponseMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditModqueueProgressMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditPropagateStatusMapping;
+import me.timothy.bots.database.mysql.MysqlSubredditTraditionalListStatusMapping;
 import me.timothy.bots.database.mysql.MysqlSubscribedHashtagMapping;
+import me.timothy.bots.database.mysql.MysqlTraditionalScammerMapping;
 import me.timothy.bots.database.mysql.MysqlUnbanHistoryMapping;
+import me.timothy.bots.database.mysql.MysqlUnbanRequestMapping;
 import me.timothy.bots.models.Fullname;
 
 /**
@@ -53,6 +59,9 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private SubredditPropagateStatusMapping subredditPropagateStatusMapping;
 	private UnbanHistoryMapping unbanHistoryMapping;
 	private HandledAtTimestampMapping handledAtTimestampMapping;
+	private TraditionalScammerMapping traditionalScammerMapping;
+	private UnbanRequestMapping unbanRequestMapping;
+	private SubredditTraditionalListStatusMapping subredditTraditionalListStatusMapping; 
 	
 	private SchemaValidator fullnameValidator;
 	private SchemaValidator monitoredSubredditValidator;
@@ -65,6 +74,9 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private SchemaValidator subredditPropagateStatusValidator;
 	private SchemaValidator unbanHistoryValidator;
 	private SchemaValidator handledAtTimestampValidator;
+	private SchemaValidator traditionalScammerValidator;
+	private SchemaValidator unbanRequestValidator;
+	private SchemaValidator subredditTraditionalListStatusValidator;
 	
 	/**
 	 * Connects to the specified database. If there is an active connection
@@ -98,6 +110,9 @@ public class USLDatabase extends Database implements MappingDatabase {
 		subredditPropagateStatusMapping = new MysqlSubredditPropagateStatusMapping(this, connection);
 		unbanHistoryMapping = new MysqlUnbanHistoryMapping(this, connection);
 		handledAtTimestampMapping = new MysqlHandledAtTimestampMapping(this, connection);
+		traditionalScammerMapping = new MysqlTraditionalScammerMapping(this, connection);
+		unbanRequestMapping = new MysqlUnbanRequestMapping(this, connection);
+		subredditTraditionalListStatusMapping = new MysqlSubredditTraditionalListStatusMapping(this, connection);
 		
 		fullnameValidator = (SchemaValidator) fullnameMapping;
 		monitoredSubredditValidator = (SchemaValidator) monitoredSubredditMapping;
@@ -110,6 +125,9 @@ public class USLDatabase extends Database implements MappingDatabase {
 		subredditPropagateStatusValidator = (SchemaValidator) subredditPropagateStatusMapping;
 		unbanHistoryValidator = (SchemaValidator) unbanHistoryMapping;
 		handledAtTimestampValidator = (SchemaValidator) handledAtTimestampMapping;
+		traditionalScammerValidator = (SchemaValidator) traditionalScammerMapping;
+		unbanRequestValidator = (SchemaValidator) unbanRequestMapping;
+		subredditTraditionalListStatusValidator = (SchemaValidator) subredditTraditionalListStatusMapping;
 	}
 
 	/**
@@ -134,6 +152,9 @@ public class USLDatabase extends Database implements MappingDatabase {
 		subredditPropagateStatusMapping = null;
 		unbanHistoryMapping = null;
 		handledAtTimestampMapping = null;
+		traditionalScammerMapping = null;
+		unbanRequestMapping = null;
+		subredditTraditionalListStatusMapping = null;
 		
 		fullnameValidator = null;
 		monitoredSubredditValidator = null;
@@ -146,6 +167,9 @@ public class USLDatabase extends Database implements MappingDatabase {
 		subredditPropagateStatusValidator = null;
 		unbanHistoryValidator = null;
 		handledAtTimestampValidator = null;
+		traditionalScammerValidator = null;
+		unbanRequestValidator = null;
+		subredditTraditionalListStatusValidator = null;
 	}
 
 
@@ -156,6 +180,9 @@ public class USLDatabase extends Database implements MappingDatabase {
 	 */
 	public void purgeAll() {
 		/* REVERSE ORDER of validateTableState */
+		subredditTraditionalListStatusValidator.purgeSchema();
+		unbanRequestValidator.purgeSchema();
+		traditionalScammerValidator.purgeSchema();
 		handledAtTimestampValidator.purgeSchema();
 		unbanHistoryValidator.purgeSchema();
 		subredditPropagateStatusValidator.purgeSchema();
@@ -189,6 +216,9 @@ public class USLDatabase extends Database implements MappingDatabase {
 		subredditPropagateStatusValidator.validateSchema();
 		unbanHistoryValidator.validateSchema();
 		handledAtTimestampValidator.validateSchema();
+		traditionalScammerValidator.validateSchema();
+		unbanRequestValidator.validateSchema();
+		subredditTraditionalListStatusValidator.validateSchema();
 	}
 	
 	@Override
@@ -244,6 +274,21 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public HandledAtTimestampMapping getHandledAtTimestampMapping() {
 		return handledAtTimestampMapping;
+	}
+	
+	@Override
+	public TraditionalScammerMapping getTraditionalScammerMapping() {
+		return traditionalScammerMapping;
+	}
+	
+	@Override
+	public UnbanRequestMapping getUnbanRequestMapping() {
+		return unbanRequestMapping;
+	}
+	
+	@Override
+	public SubredditTraditionalListStatusMapping getSubredditTraditionalListStatusMapping() {
+		return subredditTraditionalListStatusMapping;
 	}
 	
 	/**

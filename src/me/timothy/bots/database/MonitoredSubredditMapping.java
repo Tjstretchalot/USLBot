@@ -25,4 +25,12 @@ public interface MonitoredSubredditMapping extends ObjectMapping<MonitoredSubred
 	 * @return monitored subreddit with specified id or null
 	 */
 	public MonitoredSubreddit fetchByID(int id);
+
+	/**
+	 * Fetch the subreddit with the specified name, case insensitive
+	 * 
+	 * @param name name of the subreddit
+	 * @return subreddit with that name, case insensitive
+	 */
+	public MonitoredSubreddit fetchByName(String name);
 }

@@ -17,7 +17,10 @@ import org.junit.runners.Suite.SuiteClasses;
 			MysqlSubredditPropagateStatusMappingTest.class,
 			MysqlUnbanHistoryMappingTest.class,
 			MysqlHandledModActionMappingTest.class, 
-			MysqlHandledAtTimestampMappingTest.class
+			MysqlHandledAtTimestampMappingTest.class,
+			MysqlTraditionalScammerMappingTest.class,
+			MysqlUnbanRequestMappingTest.class,
+			MysqlSubredditTraditionalListStatusMappingTest.class
 		})
 public class MysqlDatabaseTests {
 

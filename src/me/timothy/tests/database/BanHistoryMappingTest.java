@@ -193,4 +193,66 @@ public class BanHistoryMappingTest {
 		lFromDB = database.getBanHistoryMapping().fetchBanHistoriesByPersonAndSubreddit(paul.id, ericssub.id);
 		MysqlTestUtils.assertListContents(lFromDB, ban3);
 	}
+	
+	@Test
+	public void testFetchByPerson() {
+		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
+		Person john = database.getPersonMapping().fetchOrCreateByUsername("john");
+		Person eric = database.getPersonMapping().fetchOrCreateByUsername("eric");
+		
+		MonitoredSubreddit paulsSub = new MonitoredSubreddit(-1, "paulssub", false, false, false);
+		database.getMonitoredSubredditMapping().save(paulsSub);
+		
+		List<BanHistory> fromDB = database.getBanHistoryMapping().fetchBanHistoriesByPerson(paul.id);
+		assertTrue(fromDB.isEmpty());
+		
+		fromDB = database.getBanHistoryMapping().fetchBanHistoriesByPerson(john.id);
+		assertTrue(fromDB.isEmpty());
+		
+		long now = System.currentTimeMillis();
+		HandledModAction paulBansJohnHMA = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(now));
+		database.getHandledModActionMapping().save(paulBansJohnHMA);
+		
+		BanHistory paulBansJohnBH = new BanHistory(-1, paul.id, john.id, paulBansJohnHMA.id, "#scammer", "permanent");
+		database.getBanHistoryMapping().save(paulBansJohnBH);
+		
+		fromDB = database.getBanHistoryMapping().fetchBanHistoriesByPerson(paul.id);
+		assertTrue(fromDB.isEmpty());
+		
+		fromDB = database.getBanHistoryMapping().fetchBanHistoriesByPerson(john.id);
+		MysqlTestUtils.assertListContents(fromDB, paulBansJohnBH);
+		
+		fromDB = database.getBanHistoryMapping().fetchBanHistoriesByPerson(eric.id);
+		assertTrue(fromDB.isEmpty());
+		
+		HandledModAction paulBansEricHMA = new HandledModAction(-1, paulsSub.id, "ModAction_ID2", new Timestamp(now));
+		database.getHandledModActionMapping().save(paulBansEricHMA);
+		
+		BanHistory paulBansEricBH = new BanHistory(-1, paul.id, eric.id, paulBansEricHMA.id, "#scammer", "permanent");
+		database.getBanHistoryMapping().save(paulBansEricBH);
+
+		fromDB = database.getBanHistoryMapping().fetchBanHistoriesByPerson(paul.id);
+		assertTrue(fromDB.isEmpty());
+		
+		fromDB = database.getBanHistoryMapping().fetchBanHistoriesByPerson(john.id);
+		MysqlTestUtils.assertListContents(fromDB, paulBansJohnBH);
+		
+		fromDB = database.getBanHistoryMapping().fetchBanHistoriesByPerson(eric.id);
+		MysqlTestUtils.assertListContents(fromDB, paulBansEricBH);
+		
+		HandledModAction paulBansJohn2HMA = new HandledModAction(-1, paulsSub.id, "ModAction_ID3", new Timestamp(now));
+		database.getHandledModActionMapping().save(paulBansJohn2HMA);
+		
+		BanHistory paulBansJohn2BH = new BanHistory(-1, paul.id, john.id, paulBansJohn2HMA.id, "#scammer", "permanent");
+		database.getBanHistoryMapping().save(paulBansJohn2BH);
+
+		fromDB = database.getBanHistoryMapping().fetchBanHistoriesByPerson(paul.id);
+		assertTrue(fromDB.isEmpty());
+		
+		fromDB = database.getBanHistoryMapping().fetchBanHistoriesByPerson(john.id);
+		MysqlTestUtils.assertListContents(fromDB, paulBansJohnBH, paulBansJohn2BH);
+		
+		fromDB = database.getBanHistoryMapping().fetchBanHistoriesByPerson(eric.id);
+		MysqlTestUtils.assertListContents(fromDB, paulBansEricBH);
+	}
 }

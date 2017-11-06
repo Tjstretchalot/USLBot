@@ -13,8 +13,11 @@ import org.json.simple.parser.ParseException;
 
 import me.timothy.bots.memory.ModmailPMInformation;
 import me.timothy.bots.memory.PropagateResult;
+import me.timothy.bots.memory.TraditionalScammerHandlerResult;
+import me.timothy.bots.memory.UnbanRequestResult;
 import me.timothy.bots.memory.UserBanInformation;
 import me.timothy.bots.memory.UserPMInformation;
+import me.timothy.bots.memory.UserUnbanInformation;
 import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.HandledAtTimestamp;
 import me.timothy.bots.models.HandledModAction;
@@ -22,7 +25,10 @@ import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
 import me.timothy.bots.models.SubredditModqueueProgress;
 import me.timothy.bots.models.SubredditPropagateStatus;
+import me.timothy.bots.models.SubredditTraditionalListStatus;
+import me.timothy.bots.models.TraditionalScammer;
 import me.timothy.bots.models.UnbanHistory;
+import me.timothy.bots.models.UnbanRequest;
 import me.timothy.bots.summon.CommentSummon;
 import me.timothy.bots.summon.LinkSummon;
 import me.timothy.bots.summon.PMSummon;
@@ -42,6 +48,8 @@ public class USLBotDriver extends BotDriver {
 	protected List<MonitoredSubreddit> monitoredSubreddits;
 	protected USLDatabaseBackupManager backupManager;
 	protected USLPropagator propagator;
+	protected USLUnbanRequestHandler unbanRequestHandler;
+	protected USLTraditionalScammerHandler scammerHandler;
 	
 	/**
 	 * Creates a new bot driver that has the specified context to
@@ -59,6 +67,8 @@ public class USLBotDriver extends BotDriver {
 		super(database, config, bot, commentSummons, pmSummons, submissionSummons);
 		backupManager = new USLDatabaseBackupManager(database, config);
 		propagator = new USLPropagator(database, config);
+		unbanRequestHandler = new USLUnbanRequestHandler(database, config, (sub, person) -> isModerator(sub, person));
+		scammerHandler = new USLTraditionalScammerHandler(database, config);
 	}
 
 	@Override
@@ -68,6 +78,15 @@ public class USLBotDriver extends BotDriver {
 		
 		logger.trace("Updating tracked subreddits..");
 		updateTrackedSubreddits();
+		
+		logger.trace("Checking personal messages..");
+		scanPersonalMessages();
+		
+		logger.trace("Handling unban requests..");
+		handleUnbanRequests();
+		
+		logger.trace("Handling people on old style list..");
+		handleTraditionalScammers();
 		
 		logger.trace("Scanning for new ban reports..");
 		scanForBans();
@@ -88,6 +107,135 @@ public class USLBotDriver extends BotDriver {
 		monitoredSubreddits = db.getMonitoredSubredditMapping().fetchAll();
 		bot.setSubreddit(String.join("+", monitoredSubreddits.stream().map(ms -> ms.subreddit).collect(Collectors.toList())));
 	}
+
+	/**
+	 * Go through all the unban requests and handle them.
+	 */
+	protected void handleUnbanRequests() {
+		USLDatabase db = (USLDatabase) database;
+		while(true) {
+			List<UnbanRequest> unbanRequests = db.getUnbanRequestMapping().fetchUnhandled(50);
+			if(unbanRequests.isEmpty())
+				break;
+			
+			logger.printf(Level.DEBUG, "Handling %d unban requests (requested up to 50)", unbanRequests.size());
+			
+			for(UnbanRequest unbanReq : unbanRequests) {
+				Person mod = db.getPersonMapping().fetchByID(unbanReq.modPersonID);
+				Person toUnban = db.getPersonMapping().fetchByID(unbanReq.bannedPersonID);
+				
+				logger.printf(Level.TRACE, "Handling request by %s to unban %s", mod.username, toUnban.username);
+				UnbanRequestResult result = unbanRequestHandler.handleUnbanRequest(unbanReq);
+				
+				handleUnbanRequestResult(unbanReq, result, mod, toUnban);
+			}
+		}
+	}
+	
+	/**
+	 * Do what needs to be done as described in the result
+	 * 
+	 * @param request the request that was made
+	 * @param result what needs to be done
+	 * @param mod person with id request.modPersonID
+	 * @param toUnban person with id request.bannedPersonID
+	 * @return if we needed to interact with reddit
+	 */
+	protected boolean handleUnbanRequestResult(UnbanRequest request, UnbanRequestResult result, Person mod, Person toUnban) {
+		boolean didSomething = false;
+		didSomething = didSomething || handleUnbans(result.unbans);
+		didSomething = didSomething || handleModmailPMs(result.modmailPMs);
+		didSomething = didSomething || handleUserPMs(result.userPMs);
+
+		USLDatabase db = (USLDatabase) database;
+		if(result.scammerToRemove != null) {
+			Person asPerson = db.getPersonMapping().fetchByID(result.scammerToRemove.personID);
+			logger.printf(Level.INFO, "Removing %s from the Traditional Scammer List", asPerson.username);
+			
+			db.getTraditionalScammerMapping().deleteByPersonID(asPerson.id);
+		}
+		
+		request.invalid = result.invalid;
+		request.handledAt = new Timestamp(System.currentTimeMillis());
+		db.getUnbanRequestMapping().save(request);
+		
+		return didSomething;
+	}
+	
+	/**
+	 * Go through each subreddit and see if we need to handle some traditional
+	 * scammers
+	 */
+	protected void handleTraditionalScammers() {
+		USLDatabase db = (USLDatabase) database;
+		for(MonitoredSubreddit sub : monitoredSubreddits) {
+			SubredditTraditionalListStatus status = db.getSubredditTraditionalListStatusMapping().fetchBySubredditID(sub.id);
+			
+			if(status == null) {
+				logger.printf(Level.DEBUG, "No traditional list status for /r/%s - generating", sub.subreddit);
+				status = new SubredditTraditionalListStatus(-1, sub.id, null, null);
+				db.getSubredditTraditionalListStatusMapping().save(status);
+			}
+			
+			List<TraditionalScammer> toHandle;
+			if(status.lastHandledID == null) {
+				toHandle = db.getTraditionalScammerMapping().fetchEntriesAfterID(-1, 10);
+			}else {
+				toHandle = db.getTraditionalScammerMapping().fetchEntriesAfterID(status.lastHandledID, 10);
+			}
+			
+			int numRedditInteractions = 0;
+			int loopCounter = 0;
+			while(numRedditInteractions < 3 && toHandle.size() > 0 && loopCounter < 10) {
+				loopCounter++;
+				for(TraditionalScammer scammer : toHandle) {
+					Person scammerPerson = db.getPersonMapping().fetchByID(scammer.personID);
+					logger.printf(Level.TRACE, "Considering the traditional scammer %s on /r/%s", scammerPerson.username, sub.subreddit);
+					TraditionalScammerHandlerResult result = scammerHandler.handleTraditionalScammer(scammer, sub);
+					
+					if(handleTraditionalScammerHandlerResult(scammer, sub, result)) {
+						numRedditInteractions++;
+					}
+					
+					status.lastHandledAt = new Timestamp(System.currentTimeMillis());
+					status.lastHandledID = scammer.id;
+					db.getSubredditTraditionalListStatusMapping().save(status);
+					
+					if(numRedditInteractions >= 3)
+						break;
+				}
+				
+				if(numRedditInteractions >= 3) {
+					logger.printf(Level.DEBUG, "Detected it's requiring a lot of reddit interactions to update /r/%s on the traditional scammer list, postponing this until later", sub.subreddit);
+					break;
+				}
+
+				if(loopCounter >= 10) {
+					logger.printf(Level.DEBUG, "Detected we've done a lot of database interactions while updating /r/%s on the traditional scammer list, postponing this until later", sub.subreddit);
+					break;
+				}
+				
+				toHandle = db.getTraditionalScammerMapping().fetchEntriesAfterID(status.lastHandledID, 10);
+			}
+		}
+	}
+	
+	/**
+	 * Do what needs to be done as specified in the handler result
+	 * @param scammer the scammer that was handled
+	 * @param sub the subreddit it was handled on
+	 * @param result what to do
+	 * @return if a reddit interaction was required
+	 */
+	protected boolean handleTraditionalScammerHandlerResult(TraditionalScammer scammer, MonitoredSubreddit sub,
+			TraditionalScammerHandlerResult result) {
+		boolean didSomething = false;
+		didSomething = didSomething || handleBans(result.bans);
+		didSomething = didSomething || handleModmailPMs(result.modmailPMs);
+		didSomething = didSomething || handleUserPMs(result.userPMs);
+		return didSomething;
+	}
+	
 
 	/**
 	 * Loops through the subreddits and scans them for bans
@@ -487,6 +635,11 @@ public class USLBotDriver extends BotDriver {
 					logger.printf(Level.DEBUG, "Propagating bh id=%d (%d banned on %d by %d) to %s", bh.id, bh.bannedPersonID, hma.monitoredSubredditID, bh.modPersonID, subreddit.subreddit);
 					
 					PropagateResult result = propagator.propagateBan(subreddit, hma, bh);
+					if(result.postpone) {
+						logger.printf(Level.DEBUG, "Told to postpone this check until later! Not propagating or saving as propagated");
+						return;
+					}
+					
 					if(handlePropagateResult(result)) {
 						didSomethingCounter++;
 					}					
@@ -497,6 +650,11 @@ public class USLBotDriver extends BotDriver {
 						logger.printf(Level.DEBUG, "Propagating ubh id=%d (%d unbanned on %d by %d) to %s", ubh.id, ubh.unbannedPersonID, hma.monitoredSubredditID, ubh.modPersonID, subreddit.subreddit);
 						
 						PropagateResult result = propagator.propagateUnban(subreddit, hma, ubh);
+						if(result.postpone) {
+							logger.printf(Level.DEBUG, "Told to postpone this check until later! Not propagating or saving as propagated");
+							return;
+						}
+						
 						if(handlePropagateResult(result)) {
 							didSomethingCounter++;
 						}
@@ -530,23 +688,75 @@ public class USLBotDriver extends BotDriver {
 	 */
 	protected boolean handlePropagateResult(PropagateResult result) {
 		boolean didSomething = false;
-		for(UserBanInformation ban : result.bans) {
+		didSomething = didSomething || handleBans(result.bans);
+		didSomething = didSomething || handleModmailPMs(result.modmailPMs);
+		didSomething = didSomething || handleUserPMs(result.userPMs);
+		return didSomething;
+	}
+	
+	/**
+	 * Handle the list of bans that need to be done
+	 * 
+	 * @param bans the bans to do
+	 * @return if we did something with reddit
+	 */
+	protected boolean handleBans(List<UserBanInformation> bans) {
+		boolean didSomething = false;
+		for(UserBanInformation ban : bans) {
 			logger.printf(Level.INFO, "Banning %s on %s..", ban.person.username, ban.subreddit.subreddit);
 			
 			handleBanUser(ban);
 			sleepFor(2000);
 			didSomething = true;
 		}
-		
-		for(ModmailPMInformation modPm : result.modmailPMs) {
+		return didSomething;
+	}
+	
+	/**
+	 * Handle the list of unbans that need to be done
+	 * 
+	 * @param unbans the unbans to do
+	 * @return if we did something with reddit
+	 */
+	protected boolean handleUnbans(List<UserUnbanInformation> unbans) {
+		boolean didSomething = false;
+		for(UserUnbanInformation unban : unbans) {
+			logger.printf(Level.INFO, "Unbanning %s on %s..", unban.person.username, unban.subreddit.subreddit);
+			
+			handleUnbanUser(unban);
+			sleepFor(2000);
+			didSomething = true;
+		}
+		return didSomething;
+	}
+	
+	/**
+	 * Handle the list of modmail pms that need to be done
+	 * 
+	 * @param modmailPMs the pms to send out
+	 * @return if we did something with reddit
+	 */
+	protected boolean handleModmailPMs(List<ModmailPMInformation> modmailPMs) {
+		boolean didSomething = false;
+		for(ModmailPMInformation modPm : modmailPMs) {
 			logger.printf(Level.INFO, "Sending some modmail to %s (title=%s)", modPm.subreddit, modPm.title);
 			logger.trace("body=" + modPm.body);
 			sendModmail(modPm.subreddit.subreddit, modPm.title, modPm.body);
 			sleepFor(2000);
 			didSomething = true;
 		}
-		
-		for(UserPMInformation userPm : result.userPMs) {
+		return didSomething;
+	}
+	
+	/**
+	 * Handle the list of user pms that need to be done
+	 * 
+	 * @param userPMs the pms to send out
+	 * @return if we did something with reddit
+	 */
+	protected boolean handleUserPMs(List<UserPMInformation> userPMs) {
+		boolean didSomething = false;
+		for(UserPMInformation userPm : userPMs) {
 			logger.printf(Level.INFO, "Sending some mail to %s (title=%s)", userPm.person.username, userPm.title);
 			sendMessage(userPm.person.username, userPm.title, userPm.body);
 			sleepFor(2000);
@@ -565,6 +775,15 @@ public class USLBotDriver extends BotDriver {
 		super.handleBanUser(banInfo.subreddit.subreddit, banInfo.person.username, banInfo.banMessage, banInfo.banReason, banInfo.banNote);
 	}
 	
+	/**
+	 * Unbans the specified user from the specified subreddit.
+	 * This is just a wrapper around handleUnbanUser(suberddit, username)
+	 * 
+	 * @param unbanInfo the information regarding the unban
+	 */
+	protected void handleUnbanUser(UserUnbanInformation unbanInfo) {
+		super.handleUnbanUser(unbanInfo.subreddit.subreddit, unbanInfo.person.username);
+	}
 	/**
 	 * Sends modmail to the specified subreddit
 	 * @param sub subreddit to message

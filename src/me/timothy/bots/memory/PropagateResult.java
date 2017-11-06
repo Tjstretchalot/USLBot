@@ -52,20 +52,27 @@ public class PropagateResult {
 	 */
 	public final List<UserPMInformation> userPMs;
 
+	/** 
+	 * If we can't figure out what to do yet 
+	 */
+	public final boolean postpone;
+	
 	/**
 	 * @param subreddit subreddit was considered to create this
 	 * @param handledModAction action that was considered to create this
 	 * @param bans the bans that need to occur because of this
 	 * @param modmailPMs the modmail pms that need to occur because of this
 	 * @param userPMs the users to pm because of this
+	 * @param postpone true if we dont know what to do yet
 	 */
 	public PropagateResult(MonitoredSubreddit subreddit, HandledModAction handledModAction, List<UserBanInformation> bans,
-			List<ModmailPMInformation> modmailPMs, List<UserPMInformation> userPMs) {
+			List<ModmailPMInformation> modmailPMs, List<UserPMInformation> userPMs, boolean postpone) {
 		this.subreddit = subreddit;
 		this.handledModAction = handledModAction;
 		this.bans = bans;
 		this.modmailPMs = modmailPMs;
 		this.userPMs = userPMs;
+		this.postpone = postpone;
 	}
 
 	/**
@@ -75,16 +82,28 @@ public class PropagateResult {
 	 * @param handledModAction the action that was considered
 	 */
 	public PropagateResult(MonitoredSubreddit subreddit, HandledModAction handledModAction) {
-		this(subreddit, handledModAction, new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+		this(subreddit, handledModAction, new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), false);
+	}
+
+	/**
+	 * Create a ban history propagate result that does nothing and postpones
+	 * 
+	 * @param subreddit the subreddit that was considered
+	 * @param handledModAction the action that was considered
+	 * @param postpone true if we dont know what to do yet
+	 */
+	public PropagateResult(MonitoredSubreddit subreddit, HandledModAction handledModAction, boolean postpone) {
+		this(subreddit, handledModAction, new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), postpone);
 	}
 
 	@Override
 	public int hashCode() {
 		final int prime = 31;
 		int result = 1;
-		result = prime * result + ((handledModAction == null) ? 0 : handledModAction.hashCode());
 		result = prime * result + ((bans == null) ? 0 : bans.hashCode());
+		result = prime * result + ((handledModAction == null) ? 0 : handledModAction.hashCode());
 		result = prime * result + ((modmailPMs == null) ? 0 : modmailPMs.hashCode());
+		result = prime * result + (postpone ? 1231 : 1237);
 		result = prime * result + ((subreddit == null) ? 0 : subreddit.hashCode());
 		result = prime * result + ((userPMs == null) ? 0 : userPMs.hashCode());
 		return result;
@@ -96,23 +115,25 @@ public class PropagateResult {
 			return true;
 		if (obj == null)
 			return false;
-		if (getClass() != obj.getClass())
+		if (!(obj instanceof PropagateResult))
 			return false;
 		PropagateResult other = (PropagateResult) obj;
-		if (handledModAction == null) {
-			if (other.handledModAction != null)
-				return false;
-		} else if (!handledModAction.equals(other.handledModAction))
-			return false;
 		if (bans == null) {
 			if (other.bans != null)
 				return false;
 		} else if (!bans.equals(other.bans))
 			return false;
+		if (handledModAction == null) {
+			if (other.handledModAction != null)
+				return false;
+		} else if (!handledModAction.equals(other.handledModAction))
+			return false;
 		if (modmailPMs == null) {
 			if (other.modmailPMs != null)
 				return false;
 		} else if (!modmailPMs.equals(other.modmailPMs))
+			return false;
+		if (postpone != other.postpone)
 			return false;
 		if (subreddit == null) {
 			if (other.subreddit != null)
@@ -129,8 +150,8 @@ public class PropagateResult {
 
 	@Override
 	public String toString() {
-		return "BanHistoryPropagateResult [subreddit=" + subreddit + ", handledModAction=" + handledModAction + ", bans=" + bans
-				+ ", modmailPMs=" + modmailPMs + ", userPMs=" + userPMs + "]";
+		return "PropagateResult [subreddit=" + subreddit + ", handledModAction=" + handledModAction + ", bans=" + bans
+				+ ", modmailPMs=" + modmailPMs + ", userPMs=" + userPMs + ", postpone=" + postpone + "]";
 	}
 	
 	

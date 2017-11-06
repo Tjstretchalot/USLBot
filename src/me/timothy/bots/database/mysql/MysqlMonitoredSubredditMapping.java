@@ -95,6 +95,13 @@ public class MysqlMonitoredSubredditMapping extends MysqlObjectWithIDMapping<Mon
 		}
 	}
 
+	@Override
+	public MonitoredSubreddit fetchByName(String name) {
+		return fetchByAction("SELECT * FROM " + table + " WHERE subreddit=?",
+				new PreparedStatementSetVarsUnsafe(new MysqlTypeValueTuple(Types.VARCHAR, name)),
+				fetchFromSetFunction());
+	}
+
 	/**
 	 * Fetches a monitored subreddit from the result set
 	 * 

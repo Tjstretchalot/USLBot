@@ -50,6 +50,7 @@ public interface HandledModActionMapping extends ObjectMapping<HandledModAction>
 	 * @param monitoredSubredditID the subreddit
 	 * @param timestamp the timestamp
 	 * @return the list of handled mod actions at the given timestamp for the specified subreddit
+	 * @deprecated this function is not useful. use fetchByTimestamp
 	 */
 	@Deprecated
 	public List<HandledModAction> fetchByTimestampForSubreddit(int monitoredSubredditID, Timestamp timestamp);
@@ -62,6 +63,7 @@ public interface HandledModActionMapping extends ObjectMapping<HandledModAction>
 	 * @param after the id to fetch results after
 	 * @param num the maximum number of results returned
 	 * @return at most num HandledModAction with id>after in ascending order
+	 * @deprecated this function is not useful. use fetchLatest
 	 */
 	@Deprecated
 	public List<HandledModAction> fetchLatestForSubreddit(int monitoredSubredditID, Timestamp after, int num);

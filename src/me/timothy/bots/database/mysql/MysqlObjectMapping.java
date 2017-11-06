@@ -301,15 +301,23 @@ public abstract class MysqlObjectMapping<A> implements ObjectMapping<A>, SchemaV
 	 */
 	protected void verifyColumns(DatabaseMetaData metadata) throws SQLException, IllegalStateException {
 		List<MysqlColumn> toFind = Arrays.asList(columns);
+		int foundCounter = 0;
 		List<String> errors = new ArrayList<>();
 		
 		ResultSet columns = metadata.getColumns(null, null, table, "%");
 		
 		while(columns.next()) {
-			verifyColumn(toFind, errors, columns);
+			MysqlColumn tmp = verifyColumn(toFind, errors, columns);
+			if(tmp != null) {
+				foundCounter++;
+			}
 		}
 		
 		columns.close();
+		
+		if(foundCounter != toFind.size()) {
+			errors.add("Expected a total of " + toFind.size() + " columns but got " + foundCounter);
+		}
 		
 		if(errors.size() > 0) {
 			String errorMess = errors.stream().collect(Collectors.joining("; "));
@@ -327,7 +335,7 @@ public abstract class MysqlObjectMapping<A> implements ObjectMapping<A>, SchemaV
 	 * @param columns the result set. you should check the current row of the result set
 	 * @throws SQLException if one occurs
 	 */
-	protected void verifyColumn(List<MysqlColumn> toFind, List<String> errors, ResultSet columns) throws SQLException {
+	protected MysqlColumn verifyColumn(List<MysqlColumn> toFind, List<String> errors, ResultSet columns) throws SQLException {
 		String name = columns.getString(4);
 		int datatype = columns.getInt(5);
 		String autoIncrement = columns.getString(23);
@@ -337,8 +345,10 @@ public abstract class MysqlObjectMapping<A> implements ObjectMapping<A>, SchemaV
 		
 		if(!found.isPresent()) {
 			errors.add(String.format("unexpected column %s", name));
+			return null;
 		}else if(!real.equals(found.get())) {
 			errors.add(found.get().getDifferencePretty(real));
 		}
+		return found.get();
 	}
 }

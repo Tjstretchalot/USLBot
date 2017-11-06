@@ -22,6 +22,7 @@ import me.timothy.bots.models.Person;
 import me.timothy.bots.models.Response;
 import me.timothy.bots.models.SubscribedHashtag;
 import me.timothy.bots.models.UnbanHistory;
+import me.timothy.bots.models.UnbanRequest;
 import me.timothy.bots.responses.ResponseFormatter;
 import me.timothy.bots.responses.ResponseInfo;
 import me.timothy.bots.responses.ResponseInfoFactory;
@@ -91,6 +92,16 @@ public class USLPropagator {
 		
 		if(hma.monitoredSubredditID == subreddit.id)
 			return new PropagateResult(subreddit, hma);
+		
+		UnbanRequest unbanRequest = database.getUnbanRequestMapping().fetchLatestValidByBannedPerson(history.bannedPersonID);
+		if(unbanRequest != null) {
+			if(unbanRequest.handledAt == null)
+				return new PropagateResult(subreddit, hma, true);
+			
+			if(unbanRequest.createdAt.after(hma.occurredAt)) {
+				return new PropagateResult(subreddit, hma);
+			}
+		}
 
 		UnbanHistory mostRecentUnbanOnBannedSubreddit = database.getUnbanHistoryMapping().fetchUnbanHistoryByPersonAndSubreddit(history.bannedPersonID, hma.monitoredSubredditID);
 		if(mostRecentUnbanOnBannedSubreddit != null) {
@@ -113,18 +124,12 @@ public class USLPropagator {
 		if(history.banDescription == null)
 			return new PropagateResult(subreddit, hma);
 		
-		List<SubscribedHashtag> relevant = new ArrayList<>();
 		String descriptionLower = history.banDescription.toLowerCase();
-		List<SubscribedHashtag> hashtags = database.getSubscribedHashtagMapping().fetchForSubreddit(subreddit.id, false);
-		for(SubscribedHashtag tag : hashtags) {
-			if(descriptionLower.contains(tag.hashtag.toLowerCase())) {
-				relevant.add(tag);
-			}
-		}
+		List<SubscribedHashtag> relevant = USLUtils.getRelevantTags(database, config, subreddit, descriptionLower);
 		
 		if(relevant.isEmpty()) 
 			return new PropagateResult(subreddit, hma);
-		String tagsStringified = String.join(", ", relevant.stream().map(tag -> tag.hashtag).collect(Collectors.toList()));
+		String tagsStringified = USLUtils.combineTagsWithCommas(relevant);
 		
 
 		List<UserBanInformation> bans = new ArrayList<>();
@@ -170,7 +175,7 @@ public class USLPropagator {
 		}
 		
 		
-		return new PropagateResult(subreddit, hma, bans, modmailPms, userPms);
+		return new PropagateResult(subreddit, hma, bans, modmailPms, userPms, false);
 	}
 
 	/**
