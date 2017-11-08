@@ -10,6 +10,7 @@ import org.apache.logging.log4j.Logger;
 import me.timothy.bots.summon.CommentSummon;
 import me.timothy.bots.summon.LinkSummon;
 import me.timothy.bots.summon.PMSummon;
+import me.timothy.bots.summon.UnbanRequestPMSummon;
 import me.timothy.jreddit.requests.Utils;
 
 /**
@@ -61,7 +62,9 @@ public class USLBotMain {
 		logger.debug("Running USLBotDriver..");
 		BotDriver driver = new USLBotDriver(database, config, uslBot,
 				new CommentSummon[] { }, 
-				new PMSummon[] { },
+				new PMSummon[] { 
+						new UnbanRequestPMSummon()
+				},
 				new LinkSummon[] { });
 		
 		while(true) {
