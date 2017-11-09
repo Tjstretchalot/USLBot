@@ -26,5 +26,5 @@ unban_request_removed_from_list_body - same as title
 unban_request_valid_modmail_list_title - <unban mod>, <unbanned user>, <scammer reason>, <scammer description>
 unban_request_valid_modmail_list_body - same as title 
 
-unban_request_from_pm_response_title = <users_to_unban>
+unban_request_from_pm_response_title = <users_to_unban> (comma delimited string)
 unban_request_from_pm_response_body = same as title

@@ -143,9 +143,9 @@ public class USLBotDriver extends BotDriver {
 	 */
 	protected boolean handleUnbanRequestResult(UnbanRequest request, UnbanRequestResult result, Person mod, Person toUnban) {
 		boolean didSomething = false;
-		didSomething = didSomething || handleUnbans(result.unbans);
-		didSomething = didSomething || handleModmailPMs(result.modmailPMs);
-		didSomething = didSomething || handleUserPMs(result.userPMs);
+		didSomething = handleUnbans(result.unbans) || didSomething;
+		didSomething = handleModmailPMs(result.modmailPMs) || didSomething;
+		didSomething = handleUserPMs(result.userPMs) || didSomething;
 
 		USLDatabase db = (USLDatabase) database;
 		if(result.scammerToRemove != null) {
@@ -229,10 +229,12 @@ public class USLBotDriver extends BotDriver {
 	 */
 	protected boolean handleTraditionalScammerHandlerResult(TraditionalScammer scammer, MonitoredSubreddit sub,
 			TraditionalScammerHandlerResult result) {
+		logger.printf(Level.TRACE, "Handling a TradScamRes with %d bans, %d modmail pms, and %d user pms", result.bans.size(), result.modmailPMs.size(), result.userPMs.size());
+		
 		boolean didSomething = false;
-		didSomething = didSomething || handleBans(result.bans);
-		didSomething = didSomething || handleModmailPMs(result.modmailPMs);
-		didSomething = didSomething || handleUserPMs(result.userPMs);
+		didSomething = handleBans(result.bans) || didSomething;
+		didSomething = handleModmailPMs(result.modmailPMs) || didSomething;
+		didSomething = handleUserPMs(result.userPMs) || didSomething;
 		return didSomething;
 	}
 	
@@ -688,9 +690,9 @@ public class USLBotDriver extends BotDriver {
 	 */
 	protected boolean handlePropagateResult(PropagateResult result) {
 		boolean didSomething = false;
-		didSomething = didSomething || handleBans(result.bans);
-		didSomething = didSomething || handleModmailPMs(result.modmailPMs);
-		didSomething = didSomething || handleUserPMs(result.userPMs);
+		didSomething = handleBans(result.bans) || didSomething;
+		didSomething = handleModmailPMs(result.modmailPMs) || didSomething;
+		didSomething = handleUserPMs(result.userPMs) || didSomething;
 		return didSomething;
 	}
 	
