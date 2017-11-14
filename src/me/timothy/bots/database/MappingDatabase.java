@@ -21,4 +21,5 @@ public interface MappingDatabase {
 	public TraditionalScammerMapping getTraditionalScammerMapping();
 	public UnbanRequestMapping getUnbanRequestMapping();
 	public SubredditTraditionalListStatusMapping getSubredditTraditionalListStatusMapping();
+	public LastInfoPMMapping getLastInfoPMMapping();
 }

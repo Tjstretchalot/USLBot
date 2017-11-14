@@ -20,7 +20,8 @@ import org.junit.runners.Suite.SuiteClasses;
 			MysqlHandledAtTimestampMappingTest.class,
 			MysqlTraditionalScammerMappingTest.class,
 			MysqlUnbanRequestMappingTest.class,
-			MysqlSubredditTraditionalListStatusMappingTest.class
+			MysqlSubredditTraditionalListStatusMappingTest.class,
+			MysqlLastInfoPMMappingTest.class
 		})
 public class MysqlDatabaseTests {
 

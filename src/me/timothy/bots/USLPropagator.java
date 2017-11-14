@@ -17,6 +17,7 @@ import me.timothy.bots.memory.UserBanInformation;
 import me.timothy.bots.memory.UserPMInformation;
 import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.HandledModAction;
+import me.timothy.bots.models.LastInfoPM;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
 import me.timothy.bots.models.Response;
@@ -424,6 +425,7 @@ public class USLPropagator {
 		userPMResponseInfo.addLongtermString("triggering tags", tagsStringified);
 		userPMResponseInfo.addLongtermString("full history", historyOfPersonString);
 		for(int modPersonWithHistoryID : modsFromDB.keySet()) {
+			userPMResponseInfo.clearTemporary();
 			Person modPersonWithHistory = modsFromDB.get(modPersonWithHistoryID);
 			
 			if(modPersonWithHistory.id == mePerson.id) {
@@ -442,22 +444,22 @@ public class USLPropagator {
 			if(thisModPersonsUnbans == null) {
 				thisModPersonsUnbans = new ArrayList<>();
 			}
+
+			Timestamp latestActionByThisMod = null;
+			for(BanHistory bh : thisModPersonsBans) {
+				HandledModAction bhHMA = database.getHandledModActionMapping().fetchByID(bh.handledModActionID);
+				if(latestActionByThisMod == null || bhHMA.occurredAt.after(latestActionByThisMod)) {
+					latestActionByThisMod = bhHMA.occurredAt;
+				}
+			}
+			for(UnbanHistory ubh : thisModPersonsUnbans) {
+				HandledModAction ubhHMA = database.getHandledModActionMapping().fetchByID(ubh.handledModActionID);
+				if(latestActionByThisMod == null || ubhHMA.occurredAt.after(latestActionByThisMod)) {
+					latestActionByThisMod = ubhHMA.occurredAt;
+				}
+			}
 			
 			if(botHistory) {
-				Timestamp latestActionByThisMod = null;
-				for(BanHistory bh : thisModPersonsBans) {
-					HandledModAction bhHMA = database.getHandledModActionMapping().fetchByID(bh.handledModActionID);
-					if(latestActionByThisMod == null || bhHMA.occurredAt.after(latestActionByThisMod)) {
-						latestActionByThisMod = bhHMA.occurredAt;
-					}
-				}
-				for(UnbanHistory ubh : thisModPersonsUnbans) {
-					HandledModAction ubhHMA = database.getHandledModActionMapping().fetchByID(ubh.handledModActionID);
-					if(latestActionByThisMod == null || ubhHMA.occurredAt.after(latestActionByThisMod)) {
-						latestActionByThisMod = ubhHMA.occurredAt;
-					}
-				}
-				
 				if(latestActionByThisMod.before(newestBotHistory)) {
 					logger.trace("Not sending a pm to " + modPersonWithHistory.username + " because a bot has taken actions since his last action and "
 							+ "it would be redundant to pm him about it now");
@@ -471,6 +473,16 @@ public class USLPropagator {
 				// his oldest action is AFTER this action
 				continue;
 			}
+
+			// TODO if lastinfopm timestamp is there for these two people, skip 
+			LastInfoPM lastInfoPM = database.getLastInfoPMMapping().fetchByModAndUser(modPersonWithHistory.id, banned.id);
+			if(lastInfoPM != null) {
+				logger.trace("Not sending a pm to " + modPersonWithHistory.username + " because we've sent this information already");
+				continue;
+			}
+			
+			lastInfoPM = new LastInfoPM(-1, modPersonWithHistory.id, banned.id, new Timestamp(System.currentTimeMillis()));
+			database.getLastInfoPMMapping().save(lastInfoPM);
 			
 			userPMResponseInfo.addTemporaryString("old mod num bans", Integer.toString(thisModPersonsBans.size()));
 			userPMResponseInfo.addTemporaryString("old mod num unbans", Integer.toString(thisModPersonsUnbans.size()));

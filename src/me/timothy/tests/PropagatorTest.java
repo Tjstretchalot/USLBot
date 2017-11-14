@@ -507,6 +507,13 @@ public class PropagatorTest {
 				userPM.body
 				);
 		assertFalse(result.postpone);
+		
+		// doesn't send it twice!
+		result = propagator.propagateBan(paulsSub, adamBansEricHMA, adamBansEric);
+		assertTrue(result.bans.isEmpty());
+		assertTrue(result.modmailPMs.isEmpty());
+		assertTrue(result.userPMs.isEmpty());
+		assertFalse(result.postpone);
 	}
 	
 	@Test

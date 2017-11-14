@@ -10,6 +10,7 @@ import me.timothy.bots.database.BanHistoryMapping;
 import me.timothy.bots.database.FullnameMapping;
 import me.timothy.bots.database.HandledAtTimestampMapping;
 import me.timothy.bots.database.HandledModActionMapping;
+import me.timothy.bots.database.LastInfoPMMapping;
 import me.timothy.bots.database.MappingDatabase;
 import me.timothy.bots.database.MonitoredSubredditMapping;
 import me.timothy.bots.database.PersonMapping;
@@ -26,6 +27,7 @@ import me.timothy.bots.database.mysql.MysqlBanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlFullnameMapping;
 import me.timothy.bots.database.mysql.MysqlHandledAtTimestampMapping;
 import me.timothy.bots.database.mysql.MysqlHandledModActionMapping;
+import me.timothy.bots.database.mysql.MysqlLastInfoPMMapping;
 import me.timothy.bots.database.mysql.MysqlMonitoredSubredditMapping;
 import me.timothy.bots.database.mysql.MysqlPersonMapping;
 import me.timothy.bots.database.mysql.MysqlResponseMapping;
@@ -62,6 +64,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private TraditionalScammerMapping traditionalScammerMapping;
 	private UnbanRequestMapping unbanRequestMapping;
 	private SubredditTraditionalListStatusMapping subredditTraditionalListStatusMapping; 
+	private LastInfoPMMapping lastInfoPMMapping;
 	
 	private SchemaValidator fullnameValidator;
 	private SchemaValidator monitoredSubredditValidator;
@@ -77,6 +80,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private SchemaValidator traditionalScammerValidator;
 	private SchemaValidator unbanRequestValidator;
 	private SchemaValidator subredditTraditionalListStatusValidator;
+	private SchemaValidator lastInfoPMValidator;
 	
 	/**
 	 * Connects to the specified database. If there is an active connection
@@ -113,6 +117,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		traditionalScammerMapping = new MysqlTraditionalScammerMapping(this, connection);
 		unbanRequestMapping = new MysqlUnbanRequestMapping(this, connection);
 		subredditTraditionalListStatusMapping = new MysqlSubredditTraditionalListStatusMapping(this, connection);
+		lastInfoPMMapping = new MysqlLastInfoPMMapping(this, connection);
 		
 		fullnameValidator = (SchemaValidator) fullnameMapping;
 		monitoredSubredditValidator = (SchemaValidator) monitoredSubredditMapping;
@@ -128,6 +133,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		traditionalScammerValidator = (SchemaValidator) traditionalScammerMapping;
 		unbanRequestValidator = (SchemaValidator) unbanRequestMapping;
 		subredditTraditionalListStatusValidator = (SchemaValidator) subredditTraditionalListStatusMapping;
+		lastInfoPMValidator = (SchemaValidator) lastInfoPMMapping;
 	}
 
 	/**
@@ -155,6 +161,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		traditionalScammerMapping = null;
 		unbanRequestMapping = null;
 		subredditTraditionalListStatusMapping = null;
+		lastInfoPMMapping = null;
 		
 		fullnameValidator = null;
 		monitoredSubredditValidator = null;
@@ -170,6 +177,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		traditionalScammerValidator = null;
 		unbanRequestValidator = null;
 		subredditTraditionalListStatusValidator = null;
+		lastInfoPMValidator = null;
 	}
 
 
@@ -180,6 +188,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	 */
 	public void purgeAll() {
 		/* REVERSE ORDER of validateTableState */
+		lastInfoPMValidator.purgeSchema();
 		subredditTraditionalListStatusValidator.purgeSchema();
 		unbanRequestValidator.purgeSchema();
 		traditionalScammerValidator.purgeSchema();
@@ -219,6 +228,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		traditionalScammerValidator.validateSchema();
 		unbanRequestValidator.validateSchema();
 		subredditTraditionalListStatusValidator.validateSchema();
+		lastInfoPMValidator.validateSchema();
 	}
 	
 	@Override
@@ -289,6 +299,11 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public SubredditTraditionalListStatusMapping getSubredditTraditionalListStatusMapping() {
 		return subredditTraditionalListStatusMapping;
+	}
+	
+	@Override
+	public LastInfoPMMapping getLastInfoPMMapping() {
+		return lastInfoPMMapping;
 	}
 	
 	/**
