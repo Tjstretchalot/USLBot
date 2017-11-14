@@ -474,7 +474,6 @@ public class USLPropagator {
 				continue;
 			}
 
-			// TODO if lastinfopm timestamp is there for these two people, skip 
 			LastInfoPM lastInfoPM = database.getLastInfoPMMapping().fetchByModAndUser(modPersonWithHistory.id, banned.id);
 			if(lastInfoPM != null) {
 				logger.trace("Not sending a pm to " + modPersonWithHistory.username + " because we've sent this information already");
