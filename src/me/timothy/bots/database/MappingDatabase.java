@@ -22,4 +22,5 @@ public interface MappingDatabase {
 	public UnbanRequestMapping getUnbanRequestMapping();
 	public SubredditTraditionalListStatusMapping getSubredditTraditionalListStatusMapping();
 	public LastInfoPMMapping getLastInfoPMMapping();
+	public SiteSessionMapping getSiteSessionMapping();
 }

@@ -16,6 +16,7 @@ import me.timothy.bots.database.MonitoredSubredditMapping;
 import me.timothy.bots.database.PersonMapping;
 import me.timothy.bots.database.ResponseMapping;
 import me.timothy.bots.database.SchemaValidator;
+import me.timothy.bots.database.SiteSessionMapping;
 import me.timothy.bots.database.SubredditModqueueProgressMapping;
 import me.timothy.bots.database.SubredditPropagateStatusMapping;
 import me.timothy.bots.database.SubredditTraditionalListStatusMapping;
@@ -31,6 +32,7 @@ import me.timothy.bots.database.mysql.MysqlLastInfoPMMapping;
 import me.timothy.bots.database.mysql.MysqlMonitoredSubredditMapping;
 import me.timothy.bots.database.mysql.MysqlPersonMapping;
 import me.timothy.bots.database.mysql.MysqlResponseMapping;
+import me.timothy.bots.database.mysql.MysqlSiteSessionMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditModqueueProgressMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditPropagateStatusMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditTraditionalListStatusMapping;
@@ -65,6 +67,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private UnbanRequestMapping unbanRequestMapping;
 	private SubredditTraditionalListStatusMapping subredditTraditionalListStatusMapping; 
 	private LastInfoPMMapping lastInfoPMMapping;
+	private SiteSessionMapping siteSessionMapping;
 	
 	private SchemaValidator fullnameValidator;
 	private SchemaValidator monitoredSubredditValidator;
@@ -81,6 +84,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private SchemaValidator unbanRequestValidator;
 	private SchemaValidator subredditTraditionalListStatusValidator;
 	private SchemaValidator lastInfoPMValidator;
+	private SchemaValidator siteSessionValidator;
 	
 	/**
 	 * Connects to the specified database. If there is an active connection
@@ -118,6 +122,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		unbanRequestMapping = new MysqlUnbanRequestMapping(this, connection);
 		subredditTraditionalListStatusMapping = new MysqlSubredditTraditionalListStatusMapping(this, connection);
 		lastInfoPMMapping = new MysqlLastInfoPMMapping(this, connection);
+		siteSessionMapping = new MysqlSiteSessionMapping(this, connection);
 		
 		fullnameValidator = (SchemaValidator) fullnameMapping;
 		monitoredSubredditValidator = (SchemaValidator) monitoredSubredditMapping;
@@ -134,6 +139,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		unbanRequestValidator = (SchemaValidator) unbanRequestMapping;
 		subredditTraditionalListStatusValidator = (SchemaValidator) subredditTraditionalListStatusMapping;
 		lastInfoPMValidator = (SchemaValidator) lastInfoPMMapping;
+		siteSessionValidator = (SchemaValidator) siteSessionMapping;
 	}
 
 	/**
@@ -162,6 +168,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		unbanRequestMapping = null;
 		subredditTraditionalListStatusMapping = null;
 		lastInfoPMMapping = null;
+		siteSessionMapping = null;
 		
 		fullnameValidator = null;
 		monitoredSubredditValidator = null;
@@ -178,6 +185,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		unbanRequestValidator = null;
 		subredditTraditionalListStatusValidator = null;
 		lastInfoPMValidator = null;
+		siteSessionValidator = null;
 	}
 
 
@@ -188,6 +196,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	 */
 	public void purgeAll() {
 		/* REVERSE ORDER of validateTableState */
+		siteSessionValidator.purgeSchema();
 		lastInfoPMValidator.purgeSchema();
 		subredditTraditionalListStatusValidator.purgeSchema();
 		unbanRequestValidator.purgeSchema();
@@ -229,6 +238,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		unbanRequestValidator.validateSchema();
 		subredditTraditionalListStatusValidator.validateSchema();
 		lastInfoPMValidator.validateSchema();
+		siteSessionValidator.validateSchema();
 	}
 	
 	@Override
@@ -304,6 +314,11 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public LastInfoPMMapping getLastInfoPMMapping() {
 		return lastInfoPMMapping;
+	}
+	
+	@Override
+	public SiteSessionMapping getSiteSessionMapping() {
+		return siteSessionMapping;
 	}
 	
 	/**
