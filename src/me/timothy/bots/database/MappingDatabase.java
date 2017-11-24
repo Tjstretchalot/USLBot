@@ -23,4 +23,6 @@ public interface MappingDatabase {
 	public SubredditTraditionalListStatusMapping getSubredditTraditionalListStatusMapping();
 	public LastInfoPMMapping getLastInfoPMMapping();
 	public SiteSessionMapping getSiteSessionMapping();
+	public RegisterAccountRequestMapping getRegisterAccountRequestMapping();
+	public ResetPasswordRequestMapping getResetPasswordRequestMapping(); 
 }

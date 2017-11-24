@@ -1,5 +1,9 @@
 package me.timothy.bots.memory;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 import me.timothy.bots.models.Person;
 
 /**
@@ -19,16 +23,21 @@ public class UserPMInformation {
 	/** The body of the pm */
 	public final String body;
 
+	/** List of callbacks to call after successfully sending this pm */
+	public final List<Runnable> callbacks;
+	
 	/**
 	 * @param person person to pm
 	 * @param title title of pm
 	 * @param body body of pm
+	 * @param the callbacks after successfully sending a pm
 	 */
-	public UserPMInformation(Person person, String title, String body) {
+	public UserPMInformation(Person person, String title, String body, Runnable... callbacks) {
 		super();
 		this.person = person;
 		this.title = title;
 		this.body = body;
+		this.callbacks = Collections.unmodifiableList(Arrays.asList(callbacks));
 	}
 
 	@Override

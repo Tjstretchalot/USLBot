@@ -14,6 +14,8 @@ import me.timothy.bots.database.LastInfoPMMapping;
 import me.timothy.bots.database.MappingDatabase;
 import me.timothy.bots.database.MonitoredSubredditMapping;
 import me.timothy.bots.database.PersonMapping;
+import me.timothy.bots.database.RegisterAccountRequestMapping;
+import me.timothy.bots.database.ResetPasswordRequestMapping;
 import me.timothy.bots.database.ResponseMapping;
 import me.timothy.bots.database.SchemaValidator;
 import me.timothy.bots.database.SiteSessionMapping;
@@ -31,6 +33,8 @@ import me.timothy.bots.database.mysql.MysqlHandledModActionMapping;
 import me.timothy.bots.database.mysql.MysqlLastInfoPMMapping;
 import me.timothy.bots.database.mysql.MysqlMonitoredSubredditMapping;
 import me.timothy.bots.database.mysql.MysqlPersonMapping;
+import me.timothy.bots.database.mysql.MysqlRegisterAccountRequestMapping;
+import me.timothy.bots.database.mysql.MysqlResetPasswordRequestMapping;
 import me.timothy.bots.database.mysql.MysqlResponseMapping;
 import me.timothy.bots.database.mysql.MysqlSiteSessionMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditModqueueProgressMapping;
@@ -68,6 +72,8 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private SubredditTraditionalListStatusMapping subredditTraditionalListStatusMapping; 
 	private LastInfoPMMapping lastInfoPMMapping;
 	private SiteSessionMapping siteSessionMapping;
+	private RegisterAccountRequestMapping registerAccountRequestMapping;
+	private ResetPasswordRequestMapping resetPasswordRequestMapping;
 	
 	private SchemaValidator fullnameValidator;
 	private SchemaValidator monitoredSubredditValidator;
@@ -85,6 +91,8 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private SchemaValidator subredditTraditionalListStatusValidator;
 	private SchemaValidator lastInfoPMValidator;
 	private SchemaValidator siteSessionValidator;
+	private SchemaValidator registerAccountRequestValidator;
+	private SchemaValidator resetPasswordRequestValidator;
 	
 	/**
 	 * Connects to the specified database. If there is an active connection
@@ -123,6 +131,8 @@ public class USLDatabase extends Database implements MappingDatabase {
 		subredditTraditionalListStatusMapping = new MysqlSubredditTraditionalListStatusMapping(this, connection);
 		lastInfoPMMapping = new MysqlLastInfoPMMapping(this, connection);
 		siteSessionMapping = new MysqlSiteSessionMapping(this, connection);
+		registerAccountRequestMapping = new MysqlRegisterAccountRequestMapping(this, connection);
+		resetPasswordRequestMapping = new MysqlResetPasswordRequestMapping(this, connection);
 		
 		fullnameValidator = (SchemaValidator) fullnameMapping;
 		monitoredSubredditValidator = (SchemaValidator) monitoredSubredditMapping;
@@ -140,6 +150,8 @@ public class USLDatabase extends Database implements MappingDatabase {
 		subredditTraditionalListStatusValidator = (SchemaValidator) subredditTraditionalListStatusMapping;
 		lastInfoPMValidator = (SchemaValidator) lastInfoPMMapping;
 		siteSessionValidator = (SchemaValidator) siteSessionMapping;
+		registerAccountRequestValidator = (SchemaValidator) registerAccountRequestMapping;
+		resetPasswordRequestValidator = (SchemaValidator) resetPasswordRequestMapping;
 	}
 
 	/**
@@ -169,6 +181,8 @@ public class USLDatabase extends Database implements MappingDatabase {
 		subredditTraditionalListStatusMapping = null;
 		lastInfoPMMapping = null;
 		siteSessionMapping = null;
+		registerAccountRequestMapping = null;
+		resetPasswordRequestMapping = null;
 		
 		fullnameValidator = null;
 		monitoredSubredditValidator = null;
@@ -186,6 +200,8 @@ public class USLDatabase extends Database implements MappingDatabase {
 		subredditTraditionalListStatusValidator = null;
 		lastInfoPMValidator = null;
 		siteSessionValidator = null;
+		registerAccountRequestValidator = null;
+		resetPasswordRequestValidator = null;
 	}
 
 
@@ -196,6 +212,8 @@ public class USLDatabase extends Database implements MappingDatabase {
 	 */
 	public void purgeAll() {
 		/* REVERSE ORDER of validateTableState */
+		resetPasswordRequestValidator.purgeSchema();
+		registerAccountRequestValidator.purgeSchema();
 		siteSessionValidator.purgeSchema();
 		lastInfoPMValidator.purgeSchema();
 		subredditTraditionalListStatusValidator.purgeSchema();
@@ -239,6 +257,8 @@ public class USLDatabase extends Database implements MappingDatabase {
 		subredditTraditionalListStatusValidator.validateSchema();
 		lastInfoPMValidator.validateSchema();
 		siteSessionValidator.validateSchema();
+		registerAccountRequestValidator.validateSchema();
+		resetPasswordRequestValidator.validateSchema();
 	}
 	
 	@Override
@@ -319,6 +339,16 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public SiteSessionMapping getSiteSessionMapping() {
 		return siteSessionMapping;
+	}
+	
+	@Override
+	public RegisterAccountRequestMapping getRegisterAccountRequestMapping() {
+		return registerAccountRequestMapping;
+	}
+	
+	@Override
+	public ResetPasswordRequestMapping getResetPasswordRequestMapping() {
+		return resetPasswordRequestMapping;
 	}
 	
 	/**

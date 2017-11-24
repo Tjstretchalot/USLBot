@@ -21,7 +21,9 @@ import org.junit.runners.Suite.SuiteClasses;
 			MysqlTraditionalScammerMappingTest.class,
 			MysqlUnbanRequestMappingTest.class,
 			MysqlSubredditTraditionalListStatusMappingTest.class,
-			MysqlLastInfoPMMappingTest.class
+			MysqlLastInfoPMMappingTest.class,
+			MysqlRegisterAccountMappingTest.class,
+			MysqlResetPasswordRequestMappingTest.class
 		})
 public class MysqlDatabaseTests {
 

@@ -50,6 +50,8 @@ public class USLBotDriver extends BotDriver {
 	protected USLPropagator propagator;
 	protected USLUnbanRequestHandler unbanRequestHandler;
 	protected USLTraditionalScammerHandler scammerHandler;
+	protected USLRegisterAccountRequestManager raqManager;
+	protected USLResetPasswordRequestManager rprManager;
 	
 	/**
 	 * Creates a new bot driver that has the specified context to
@@ -69,6 +71,8 @@ public class USLBotDriver extends BotDriver {
 		propagator = new USLPropagator(database, config);
 		unbanRequestHandler = new USLUnbanRequestHandler(database, config, (sub, person) -> isModerator(sub, person));
 		scammerHandler = new USLTraditionalScammerHandler(database, config);
+		raqManager = new USLRegisterAccountRequestManager(database, config);
+		rprManager = new USLResetPasswordRequestManager(database, config);
 	}
 
 	@Override
@@ -78,6 +82,12 @@ public class USLBotDriver extends BotDriver {
 		
 		logger.trace("Updating tracked subreddits..");
 		updateTrackedSubreddits();
+		
+		logger.trace("Sending out account request messages..");
+		sendAccountRequestMessages();
+		
+		logger.trace("Sending out reset password messages..");
+		sendResetPasswordMessages();
 		
 		logger.trace("Checking personal messages..");
 		scanPersonalMessages();
@@ -98,6 +108,27 @@ public class USLBotDriver extends BotDriver {
 		considerBackupDatabase();
 	}
 
+
+	/**
+	 * Send out the list of user pms to confirm that someone is an
+	 * owner of an account
+	 */
+	protected void sendAccountRequestMessages() {
+		List<UserPMInformation> userPms = raqManager.sendRegisterAccountRequests();
+		
+		handleUserPMs(userPms);
+	}
+
+	/**
+	 * Send out the list of user pms to confirm that someone is the
+	 * owner of an account for the purpose of resetting their usl password
+	 */
+	protected void sendResetPasswordMessages() {
+		List<UserPMInformation> userPms = rprManager.sendResetPasswordRequests();
+		
+		handleUserPMs(userPms);
+	}
+	
 	/**
 	 * Update the list of tracked subreddits from the database.
 	 */
@@ -760,7 +791,12 @@ public class USLBotDriver extends BotDriver {
 		boolean didSomething = false;
 		for(UserPMInformation userPm : userPMs) {
 			logger.printf(Level.INFO, "Sending some mail to %s (title=%s)", userPm.person.username, userPm.title);
-			sendMessage(userPm.person.username, userPm.title, userPm.body);
+			Boolean succ = sendMessage(userPm.person.username, userPm.title, userPm.body);
+			
+			if(succ != null && succ.booleanValue()) {
+				userPm.callbacks.forEach((cb) -> cb.run());
+			}
+			
 			sleepFor(2000);
 			didSomething = true;
 		}

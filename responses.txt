@@ -28,3 +28,16 @@ unban_request_valid_modmail_list_body - same as title
 
 unban_request_from_pm_response_title = <users_to_unban> (comma delimited string)
 unban_request_from_pm_response_body = same as title
+
+already_claimed_account_req_acc_reg_title = <username>, <id>
+already_claimed_account_req_acc_reg_body = same as title
+
+claim_account_pm_title = <username>, <id>, <token>
+claim_account_pm_body = same as title
+
+unclaimed_account_reset_password_title = <username>, <id>
+unclaimed_account_reset_password_body = same as title
+
+reset_password_title = <username>, <id>, <token>
+reset_password_body = same as title
+
