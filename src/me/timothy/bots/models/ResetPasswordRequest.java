@@ -12,8 +12,10 @@ public class ResetPasswordRequest {
 	public int id;
 	/** The person making the request to reset their password */
 	public int personID;
-	/** The token that is sent to them to prove they recieved our message */
+	/** The token that is sent to them to prove they received our message */
 	public String token;
+	/** If this token has already been consumed */
+	public boolean consumed;
 	/** When this request was made */
 	public Timestamp createdAt;
 	/** When the pm was sent or null if it hasn't been set yet */
@@ -26,11 +28,12 @@ public class ResetPasswordRequest {
 	 * @param createdAt when the request was made
 	 * @param sentAt when the PM was sent
 	 */
-	public ResetPasswordRequest(int id, int personID, String token, Timestamp createdAt, Timestamp sentAt) {
+	public ResetPasswordRequest(int id, int personID, String token, boolean consumed, Timestamp createdAt, Timestamp sentAt) {
 		super();
 		this.id = id;
 		this.personID = personID;
 		this.token = token;
+		this.consumed = consumed;
 		this.createdAt = createdAt;
 		this.sentAt = sentAt;
 	}
@@ -49,6 +52,7 @@ public class ResetPasswordRequest {
 	public int hashCode() {
 		final int prime = 31;
 		int result = 1;
+		result = prime * result + (consumed ? 1231 : 1237);
 		result = prime * result + ((createdAt == null) ? 0 : createdAt.hashCode());
 		result = prime * result + id;
 		result = prime * result + personID;
@@ -66,6 +70,8 @@ public class ResetPasswordRequest {
 		if (!(obj instanceof ResetPasswordRequest))
 			return false;
 		ResetPasswordRequest other = (ResetPasswordRequest) obj;
+		if (consumed != other.consumed)
+			return false;
 		if (createdAt == null) {
 			if (other.createdAt != null)
 				return false;
@@ -91,7 +97,7 @@ public class ResetPasswordRequest {
 	@Override
 	public String toString() {
 		return "ResetPasswordRequest [id=" + id + ", personID=" + personID + ", token=" 
-				+ (token == null ? "null" : "<redacted not null>") + ", createdAt="
-				+ createdAt + ", sentAt=" + sentAt + "]";
+				+ (token == null ? "null" : "<redacted not null>") + ", consumed="
+				+ consumed + ", createdAt=" + createdAt + ", sentAt=" + sentAt + "]";
 	}
 }

@@ -16,22 +16,26 @@ public class RegisterAccountRequest {
 	public int personID;
 	/** The unique token to send to the user */
 	public String token;
+	/** If this token has been consumed */
+	public boolean consumed;
 	/** When the request was made */
 	public Timestamp createdAt;
 	/** When the request was sent (or null if not sent yet) */
 	public Timestamp sentAt;
 	/**
-	 * @param id
-	 * @param personID
-	 * @param token
-	 * @param createdAt
-	 * @param sentAt
+	 * @param id the database identifier or -1
+	 * @param personID the id of the person 
+	 * @param token the unique token
+	 * @param consumed if this has been consumed already
+	 * @param createdAt when this was created
+	 * @param sentAt when this was sent
 	 */
-	public RegisterAccountRequest(int id, int personID, String token, Timestamp createdAt, Timestamp sentAt) {
+	public RegisterAccountRequest(int id, int personID, String token, boolean consumed, Timestamp createdAt, Timestamp sentAt) {
 		super();
 		this.id = id;
 		this.personID = personID;
 		this.token = token;
+		this.consumed = consumed;
 		this.createdAt = createdAt;
 		this.sentAt = sentAt;
 	}
@@ -49,6 +53,7 @@ public class RegisterAccountRequest {
 	public int hashCode() {
 		final int prime = 31;
 		int result = 1;
+		result = prime * result + (consumed ? 1231 : 1237);
 		result = prime * result + ((createdAt == null) ? 0 : createdAt.hashCode());
 		result = prime * result + id;
 		result = prime * result + personID;
@@ -65,6 +70,8 @@ public class RegisterAccountRequest {
 		if (!(obj instanceof RegisterAccountRequest))
 			return false;
 		RegisterAccountRequest other = (RegisterAccountRequest) obj;
+		if (consumed != other.consumed)
+			return false;
 		if (createdAt == null) {
 			if (other.createdAt != null)
 				return false;
@@ -88,8 +95,9 @@ public class RegisterAccountRequest {
 	}
 	@Override
 	public String toString() {
-		return "RegisterAccountRequest [id=" + id + ", personID=" + personID + ", token=" + (token == null ? "null" : "<redacted not null>") + ", createdAt="
-				+ createdAt + ", sentAt=" + sentAt + "]";
+		return "RegisterAccountRequest [id=" + id + ", personID=" + personID + ", token="
+				+ (token == null ? "null" : "<redacted not null>") + ", consumed="
+				+ consumed + ", createdAt=" + createdAt + ", sentAt=" + sentAt + "]";
 	}
 	
 	

@@ -25,7 +25,7 @@ public class RegisterAccountRequestMappingTest {
 		Person john = database.getPersonMapping().fetchOrCreateByUsername("john");
 		
 		long now = System.currentTimeMillis();
-		RegisterAccountRequest req = new RegisterAccountRequest(-1, john.id, "alskdfj", new Timestamp(now), null);
+		RegisterAccountRequest req = new RegisterAccountRequest(-1, john.id, "alskdfj", false, new Timestamp(now), null);
 		database.getRegisterAccountRequestMapping().save(req);
 		
 		assertTrue(req.id > 0);
@@ -47,7 +47,7 @@ public class RegisterAccountRequestMappingTest {
 		Person john = database.getPersonMapping().fetchOrCreateByUsername("john");
 		
 		long now = System.currentTimeMillis();
-		RegisterAccountRequest req = new RegisterAccountRequest(-1, john.id, "asldkfj", new Timestamp(now), null);
+		RegisterAccountRequest req = new RegisterAccountRequest(-1, john.id, "asldkfj", false, new Timestamp(now), null);
 		database.getRegisterAccountRequestMapping().save(req);
 		
 		List<RegisterAccountRequest> fromDB = database.getRegisterAccountRequestMapping().fetchUnsent(2);
@@ -56,7 +56,7 @@ public class RegisterAccountRequestMappingTest {
 		
 		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
 		
-		RegisterAccountRequest req2 = new RegisterAccountRequest(-1, paul.id, "aljk;", new Timestamp(now + 5000), null);
+		RegisterAccountRequest req2 = new RegisterAccountRequest(-1, paul.id, "aljk;", true, new Timestamp(now + 5000), null);
 		database.getRegisterAccountRequestMapping().save(req2);
 		
 		fromDB = database.getRegisterAccountRequestMapping().fetchUnsent(2);

@@ -23,6 +23,7 @@ public class MysqlResetPasswordRequestMapping extends MysqlObjectWithIDMapping<R
 				new MysqlColumn(Types.INTEGER, "id", true),
 				new MysqlColumn(Types.INTEGER, "person_id"),
 				new MysqlColumn(Types.VARCHAR, "token"),
+				new MysqlColumn(Types.BIT, "consumed"),
 				new MysqlColumn(Types.TIMESTAMP, "created_at"),
 				new MysqlColumn(Types.TIMESTAMP, "sent_at"));
 	}
@@ -38,14 +39,15 @@ public class MysqlResetPasswordRequestMapping extends MysqlObjectWithIDMapping<R
 		try {
 			PreparedStatement statement;
 			if(a.id > 0) 
-				statement = connection.prepareStatement("UPDATE " + table + " SET person_id=?, token=?, created_at=?, sent_at=? WHERE id=?");
+				statement = connection.prepareStatement("UPDATE " + table + " SET person_id=?, token=?, consumed=?, created_at=?, sent_at=? WHERE id=?");
 			else 
-				statement = connection.prepareStatement("INSERT INTO " + table + " (person_id, token, created_at, sent_at) "
-						+ "VALUES (?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
+				statement = connection.prepareStatement("INSERT INTO " + table + " (person_id, token, consumed, created_at, sent_at) "
+						+ "VALUES (?, ?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
 			
 			int counter = 1;
 			statement.setInt(counter++, a.personID);
 			statement.setString(counter++, a.token);
+			statement.setBoolean(counter++, a.consumed);
 			statement.setTimestamp(counter++, a.createdAt);
 			statement.setTimestamp(counter++, a.sentAt);
 			
@@ -80,7 +82,7 @@ public class MysqlResetPasswordRequestMapping extends MysqlObjectWithIDMapping<R
 	@Override
 	protected ResetPasswordRequest fetchFromSet(ResultSet set) throws SQLException {
 		return new ResetPasswordRequest(set.getInt("id"), set.getInt("person_id"),
-				set.getString("token"), set.getTimestamp("created_at"), 
+				set.getString("token"), set.getBoolean("consumed"), set.getTimestamp("created_at"), 
 				set.getTimestamp("sent_at"));
 	}
 
@@ -91,6 +93,7 @@ public class MysqlResetPasswordRequestMapping extends MysqlObjectWithIDMapping<R
 				+ "id INT NOT NULL AUTO_INCREMENT, "
 				+ "person_id INT NOT NULL, "
 				+ "token VARCHAR(255) NOT NULL, "
+				+ "consumed TINYINT(1) NOT NULL, "
 				+ "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
 				+ "sent_at TIMESTAMP NULL DEFAULT NULL, "
 				+ "PRIMARY KEY(id), "

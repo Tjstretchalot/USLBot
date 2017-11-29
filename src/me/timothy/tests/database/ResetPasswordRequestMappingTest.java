@@ -27,7 +27,7 @@ public class ResetPasswordRequestMappingTest {
 		Person john = database.getPersonMapping().fetchOrCreateByUsername("john");
 		
 		long now = System.currentTimeMillis();
-		ResetPasswordRequest req = new ResetPasswordRequest(-1, john.id, "alskdfj", new Timestamp(now), null);
+		ResetPasswordRequest req = new ResetPasswordRequest(-1, john.id, "alskdfj", true, new Timestamp(now), null);
 		database.getResetPasswordRequestMapping().save(req);
 		
 		assertTrue(req.id > 0);
@@ -49,7 +49,7 @@ public class ResetPasswordRequestMappingTest {
 		Person john = database.getPersonMapping().fetchOrCreateByUsername("john");
 		
 		long now = System.currentTimeMillis();
-		ResetPasswordRequest req = new ResetPasswordRequest(-1, john.id, "asldkfj", new Timestamp(now), null);
+		ResetPasswordRequest req = new ResetPasswordRequest(-1, john.id, "asldkfj", false, new Timestamp(now), null);
 		database.getResetPasswordRequestMapping().save(req);
 		
 		List<ResetPasswordRequest> fromDB = database.getResetPasswordRequestMapping().fetchUnsent(2);
@@ -58,7 +58,7 @@ public class ResetPasswordRequestMappingTest {
 		
 		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
 		
-		ResetPasswordRequest req2 = new ResetPasswordRequest(-1, paul.id, "aljk;", new Timestamp(now + 5000), null);
+		ResetPasswordRequest req2 = new ResetPasswordRequest(-1, paul.id, "aljk;", false, new Timestamp(now + 5000), null);
 		database.getResetPasswordRequestMapping().save(req2);
 		
 		fromDB = database.getResetPasswordRequestMapping().fetchUnsent(2);
