@@ -36,7 +36,7 @@ public class UnbanRequestPMSummon implements PMSummon {
 	/**
 	 * The format passed to the response formatter to parse the group from the pattern
 	 */
-	private static final String UNBAN_FORMAT = "$unpaid <to_unban>";
+	private static final String UNBAN_FORMAT = "$unban <user_to_unban>";
 	
 	@Override
 	public SummonResponse handlePM(Message message, Database db, FileConfiguration config) {
@@ -54,7 +54,7 @@ public class UnbanRequestPMSummon implements PMSummon {
 			String group = matcher.group().trim();
 			ResponseInfo responseInfo = ResponseInfoFactory.getResponseInfo(UNBAN_FORMAT, group);
 			
-			String toUnban = responseInfo.getObject("to_unban").toFormattedString(responseInfo, "to_unban", config, db);
+			String toUnban = responseInfo.getObject("user_to_unban").toString();
 			usersToUnban.add(toUnban);
 			
 			Person toUnbanPerson = database.getPersonMapping().fetchOrCreateByUsername(toUnban);
