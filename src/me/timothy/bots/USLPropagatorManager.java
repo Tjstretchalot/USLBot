@@ -177,7 +177,7 @@ public class USLPropagatorManager {
 			UnbanHistory ubh = database.getUnbanHistoryMapping().fetchByHandledModActionID(hma.id);
 			if(ubh != null) {
 				logger.trace("Propagating ubh=" + ubh);
-				PropagateResult result = propagator.propagateBan(major, hma, bh);
+				PropagateResult result = propagator.propagateUnban(major, hma, ubh);
 				if(resultHandler.handleResult(result)) {
 					actionCounter[0]++;
 				}
