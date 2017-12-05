@@ -123,20 +123,22 @@ public class MysqlHandledModActionMapping extends MysqlObjectWithIDMapping<Handl
 	}
 	
 	@Override
-	public List<HandledModAction> fetchByTimestampForSubreddit(int monitoredSubredditID, Timestamp timestamp) {
+	public List<HandledModAction> fetchByTimestampAndSubreddit(Timestamp timestamp, int subredditID) {
 		return fetchByAction("SELECT * FROM " + table + " WHERE monitored_subreddit_id=? AND occurred_at=?", 
 				new PreparedStatementSetVarsUnsafe(
-						new MysqlTypeValueTuple(Types.INTEGER, monitoredSubredditID),
+						new MysqlTypeValueTuple(Types.INTEGER, subredditID),
 						new MysqlTypeValueTuple(Types.TIMESTAMP, timestamp)),
 				fetchListFromSetFunction());
 	}
 
 	@Override
-	public List<HandledModAction> fetchLatestForSubreddit(int monitoredSubredditID, Timestamp after, int num) {
-		return fetchByAction("SELECT * FROM " + table + " WHERE (monitored_subreddit_id=? AND occurred_at>?) ORDER BY occurred_at ASC LIMIT ?", 
+	public List<HandledModAction> fetchLatestForSubreddit(int monitoredSubredditID, Timestamp after, Timestamp before, int num) {
+		return fetchByAction("SELECT * FROM " + table + " WHERE (monitored_subreddit_id=? AND occurred_at>=? AND (? IS NULL OR occurred_at<?)) ORDER BY occurred_at ASC LIMIT ?", 
 				new PreparedStatementSetVarsUnsafe(
 						new MysqlTypeValueTuple(Types.INTEGER, monitoredSubredditID),
 						new MysqlTypeValueTuple(Types.TIMESTAMP, after),
+						new MysqlTypeValueTuple(Types.TIMESTAMP, before),
+						new MysqlTypeValueTuple(Types.TIMESTAMP, before),
 						new MysqlTypeValueTuple(Types.INTEGER, num)),
 				fetchListFromSetFunction());
 	}

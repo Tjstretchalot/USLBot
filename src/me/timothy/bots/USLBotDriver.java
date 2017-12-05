@@ -3,7 +3,6 @@ package me.timothy.bots;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -19,12 +18,10 @@ import me.timothy.bots.memory.UserBanInformation;
 import me.timothy.bots.memory.UserPMInformation;
 import me.timothy.bots.memory.UserUnbanInformation;
 import me.timothy.bots.models.BanHistory;
-import me.timothy.bots.models.HandledAtTimestamp;
 import me.timothy.bots.models.HandledModAction;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
 import me.timothy.bots.models.SubredditModqueueProgress;
-import me.timothy.bots.models.SubredditPropagateStatus;
 import me.timothy.bots.models.SubredditTraditionalListStatus;
 import me.timothy.bots.models.TraditionalScammer;
 import me.timothy.bots.models.UnbanHistory;
@@ -48,6 +45,7 @@ public class USLBotDriver extends BotDriver {
 	protected List<MonitoredSubreddit> monitoredSubreddits;
 	protected USLDatabaseBackupManager backupManager;
 	protected USLPropagator propagator;
+	protected USLPropagatorManager propagatorManager;
 	protected USLUnbanRequestHandler unbanRequestHandler;
 	protected USLTraditionalScammerHandler scammerHandler;
 	protected USLRegisterAccountRequestManager raqManager;
@@ -69,6 +67,7 @@ public class USLBotDriver extends BotDriver {
 		super(database, config, bot, commentSummons, pmSummons, submissionSummons);
 		backupManager = new USLDatabaseBackupManager(database, config);
 		propagator = new USLPropagator(database, config);
+		propagatorManager = new USLPropagatorManager(database, config, propagator, (result) -> handlePropagateResult(result));
 		unbanRequestHandler = new USLUnbanRequestHandler(database, config, (sub, person) -> isModerator(sub, person));
 		scammerHandler = new USLTraditionalScammerHandler(database, config);
 		raqManager = new USLRegisterAccountRequestManager(database, config);
@@ -598,119 +597,7 @@ public class USLBotDriver extends BotDriver {
 	 * Uses the USLBanHistoryPropagator to decide how to propagate for each subreddit.
 	 */
 	protected void propagateBans() {
-		USLDatabase db = (USLDatabase)database;
-		if(db.getSubredditModqueueProgressMapping().anyNullLastFullHistoryTime()) {
-			logger.debug("Not propagating bans right now, still have some subreddits not up-to-date");
-			return;
-		}
-		
-		Timestamp dontPropagateLaterThan = db.getSubredditModqueueProgressMapping().fetchLeastRecentFullHistoryTime();
-		for(MonitoredSubreddit subreddit : monitoredSubreddits) {
-			logger.trace("Propagating bans to " + subreddit.subreddit);
-			propagateBansForSubreddit(subreddit, dontPropagateLaterThan);
-		}
-	}
-	
-	/**
-	 * Propagates the bans for the specified subreddit. Uses SubredditPropagateStatusMapping
-	 * in order to ensure no work is duplicated and that all bans are propagated to the subreddit.
-	 * 
-	 * @param subreddit the subreddit
-	 * @param dontPropagateLaterThan timestamp to avoid propagating later than
-	 */
-	protected void propagateBansForSubreddit(MonitoredSubreddit subreddit, Timestamp dontPropagateLaterThan) {
-		USLDatabase db = (USLDatabase)database;
-		
-		SubredditPropagateStatus status = db.getSubredditPropagateStatusMapping().fetchForSubreddit(subreddit.id);
-		
-		if(status == null) {
-			logger.warn("SubredditPropagateStatus for subreddit " + subreddit.subreddit + " was not found, autogenerating!");
-			status = new SubredditPropagateStatus(-1, subreddit.id, null, null);
-			db.getSubredditPropagateStatusMapping().save(status);
-		}
-		
-		// we will break out early after 250 ban histories or 3 ban histories
-		// requiring reddit interactions, whichever comes first
-		
-		for(int i = 0; i < 5; i++) {
-			List<HandledModAction> handledActionsToPropagate = new ArrayList<>();
-			List<HandledModAction> timeCollisions = db.getHandledModActionMapping().fetchByTimestamp(status.latestPropagatedActionTime);
-			List<HandledAtTimestamp> handledCollisions = db.getHandledAtTimestampMapping().fetchByMonitoredSubredditID(subreddit.id);
-			for(HandledModAction hma : timeCollisions) {
-				boolean found = false;
-				for(HandledAtTimestamp handled : handledCollisions) {
-					if(handled.handledModActionID == hma.id) {
-						found = true;
-						break;
-					}
-				}
-				
-				if(!found) {
-					handledActionsToPropagate.add(hma);
-				}
-			}
-			// we use 1 week from epoch here because it acts really funny near 0
-			Timestamp after = status.latestPropagatedActionTime == null ? new Timestamp((long)(6.048e+8)) : status.latestPropagatedActionTime;
-			handledActionsToPropagate.addAll(db.getHandledModActionMapping().fetchLatest(after, dontPropagateLaterThan, 50));
-			
-			if(handledActionsToPropagate.isEmpty()) {
-				logger.trace("Out of things to propagate for " + subreddit.subreddit);
-				return;
-			}
-			
-			Timestamp lastTimestamp = null;
-			
-			int didSomethingCounter = 0;
-			for(HandledModAction hma : handledActionsToPropagate) {
-				BanHistory bh = db.getBanHistoryMapping().fetchByHandledModActionID(hma.id);
-				
-				if(bh != null) {
-					logger.printf(Level.DEBUG, "Propagating bh id=%d (%d banned on %d by %d) to %s", bh.id, bh.bannedPersonID, hma.monitoredSubredditID, bh.modPersonID, subreddit.subreddit);
-					
-					PropagateResult result = propagator.propagateBan(subreddit, hma, bh);
-					if(result.postpone) {
-						logger.printf(Level.DEBUG, "Told to postpone this check until later! Not propagating or saving as propagated");
-						return;
-					}
-					
-					if(handlePropagateResult(result)) {
-						didSomethingCounter++;
-					}					
-				}else {
-					UnbanHistory ubh = db.getUnbanHistoryMapping().fetchByHandledModActionID(hma.id);
-					
-					if(ubh != null) {
-						logger.printf(Level.DEBUG, "Propagating ubh id=%d (%d unbanned on %d by %d) to %s", ubh.id, ubh.unbannedPersonID, hma.monitoredSubredditID, ubh.modPersonID, subreddit.subreddit);
-						
-						PropagateResult result = propagator.propagateUnban(subreddit, hma, ubh);
-						if(result.postpone) {
-							logger.printf(Level.DEBUG, "Told to postpone this check until later! Not propagating or saving as propagated");
-							return;
-						}
-						
-						if(handlePropagateResult(result)) {
-							didSomethingCounter++;
-						}
-					}
-				}
-				
-				if(lastTimestamp == null || hma.occurredAt.getTime() != lastTimestamp.getTime()) {
-					status.latestPropagatedActionTime = new Timestamp(hma.occurredAt.getTime());
-					db.getSubredditPropagateStatusMapping().save(status);
-					db.getHandledAtTimestampMapping().deleteByMonitoredSubredditID(subreddit.id);
-					lastTimestamp = hma.occurredAt;
-				}
-				db.getHandledAtTimestampMapping().save(new HandledAtTimestamp(subreddit.id, hma.id));
-				
-
-				if(didSomethingCounter > 3) {
-					logger.trace("Detected that " + subreddit.subreddit + " is taking a long time to propagate (many reddit interactions). Going onto next thing.");
-					return;
-				}
-			}
-		}
-		
-		logger.trace("Detected that " + subreddit.subreddit + " is taking a long time to propagate (many mod actions checked). Going onto next thing.");
+		propagatorManager.managePropagating(monitoredSubreddits);
 	}
 	
 	/**

@@ -20,7 +20,8 @@ public class MysqlHandledAtTimestampMapping extends MysqlObjectMapping<HandledAt
 	
 	public MysqlHandledAtTimestampMapping(USLDatabase database, Connection connection) {
 		super(database, connection, "handled_at_timestamps", 
-				new MysqlColumn(Types.INTEGER, "monitored_subreddit_id"),
+				new MysqlColumn(Types.INTEGER, "major_subreddit_id"),
+				new MysqlColumn(Types.INTEGER, "minor_subreddit_id"),
 				new MysqlColumn(Types.INTEGER, "handled_modaction_id"));
 	}
 
@@ -30,10 +31,11 @@ public class MysqlHandledAtTimestampMapping extends MysqlObjectMapping<HandledAt
 			throw new IllegalArgumentException(a + " is not valid");
 		
 		try {
-			PreparedStatement statement = connection.prepareStatement("INSERT INTO " + table + " (monitored_subreddit_id, "
-					+ "handled_modaction_id) VALUES (?, ?)");
+			PreparedStatement statement = connection.prepareStatement("INSERT INTO " + table + " (major_subreddit_id, "
+					+ "minor_subreddit_id, handled_modaction_id) VALUES (?, ?, ?)");
 			int counter = 1;
-			statement.setInt(counter++, a.monitoredSubredditID);
+			statement.setInt(counter++, a.majorSubredditID);
+			statement.setInt(counter++, a.minorSubredditID);
 			statement.setInt(counter++, a.handledModActionID);
 			
 			statement.executeUpdate();
@@ -45,19 +47,22 @@ public class MysqlHandledAtTimestampMapping extends MysqlObjectMapping<HandledAt
 	}
 
 	@Override
-	public List<HandledAtTimestamp> fetchByMonitoredSubredditID(int monitoredSubredditID) {
-		return fetchByAction("SELECT * FROM " + table + " WHERE monitored_subreddit_id=?", 
-				new PreparedStatementSetVarsUnsafe(new MysqlTypeValueTuple(Types.INTEGER, monitoredSubredditID)),
+	public List<HandledAtTimestamp> fetchBySubIDs(int majorSubredditID, int minorSubredditID) {
+		return fetchByAction("SELECT * FROM " + table + " WHERE major_subreddit_id=? AND minor_subreddit_id=?", 
+				new PreparedStatementSetVarsUnsafe(
+						new MysqlTypeValueTuple(Types.INTEGER, majorSubredditID),
+						new MysqlTypeValueTuple(Types.INTEGER, minorSubredditID)),
 				fetchListFromSetFunction());
 	}
 
 	@Override
-	public void deleteByMonitoredSubredditID(int monitoredSubredditID) {
+	public void deleteBySubIDs(int majorSubredditID, int minorSubredditID) {
 
 		try {
-			PreparedStatement statement = connection.prepareStatement("DELETE FROM " + table + " WHERE monitored_subreddit_id=?");
+			PreparedStatement statement = connection.prepareStatement("DELETE FROM " + table + " WHERE major_subreddit_id=? AND minor_subreddit_id=?");
 			int counter = 1;
-			statement.setInt(counter++, monitoredSubredditID);
+			statement.setInt(counter++, majorSubredditID);
+			statement.setInt(counter++, minorSubredditID);
 			
 			statement.executeUpdate();
 			statement.close();
@@ -69,18 +74,21 @@ public class MysqlHandledAtTimestampMapping extends MysqlObjectMapping<HandledAt
 
 	@Override
 	protected HandledAtTimestamp fetchFromSet(ResultSet set) throws SQLException {
-		return new HandledAtTimestamp(set.getInt("monitored_subreddit_id"), set.getInt("handled_modaction_id"));
+		return new HandledAtTimestamp(set.getInt("major_subreddit_id"), set.getInt("minor_subreddit_id"), set.getInt("handled_modaction_id"));
 	}
 
 	@Override
 	protected void createTable() throws SQLException {
 		Statement statement = connection.createStatement();
 		statement.execute("CREATE TABLE " + table + " ("
-				+ "monitored_subreddit_id INT NOT NULL, "
+				+ "major_subreddit_id INT NOT NULL, "
+				+ "minor_subreddit_id INT NOT NULL, "
 				+ "handled_modaction_id INT NOT NULL, "
-				+ "INDEX ind_handattime_monsub_id (monitored_subreddit_id), "
+				+ "INDEX ind_handattime_majmonsub_id (major_subreddit_id), "
+				+ "INDEX ind_handattime_minmonsub_id (minor_subreddit_id), "
 				+ "INDEX ind_handattime_modact_id (handled_modaction_id), "
-				+ "FOREIGN KEY (monitored_subreddit_id) REFERENCES monitored_subreddits(id), "
+				+ "FOREIGN KEY (major_subreddit_id) REFERENCES monitored_subreddits(id), "
+				+ "FOREIGN KEY (minor_subreddit_id) REFERENCES monitored_subreddits(id), "
 				+ "FOREIGN KEY (handled_modaction_id) REFERENCES handled_modactions(id)"
 				+ ")");
 		statement.close();

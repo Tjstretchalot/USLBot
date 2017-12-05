@@ -85,7 +85,6 @@ public class HandledModActionMappingTest {
 		assertNull(fromDB);
 	}
 	
-	@SuppressWarnings("deprecation")
 	@Test
 	public void testFetchByTimestampAndSubreddit() {
 		MonitoredSubreddit sub = new MonitoredSubreddit(-1, "johnssub", false, false, true);
@@ -94,36 +93,35 @@ public class HandledModActionMappingTest {
 		HandledModAction mAction = new HandledModAction(-1, sub.id, "ModAction_ID1", new Timestamp(System.currentTimeMillis()));
 		database.getHandledModActionMapping().save(mAction);
 		
-		List<HandledModAction> fromDB = database.getHandledModActionMapping().fetchByTimestampForSubreddit(sub.id, mAction.occurredAt);
+		List<HandledModAction> fromDB = database.getHandledModActionMapping().fetchByTimestampAndSubreddit(mAction.occurredAt, sub.id);
 		MysqlTestUtils.assertListContents(fromDB, mAction);
 
-		fromDB = database.getHandledModActionMapping().fetchByTimestampForSubreddit(sub.id + 1, mAction.occurredAt);
+		fromDB = database.getHandledModActionMapping().fetchByTimestampAndSubreddit(mAction.occurredAt, sub.id + 1);
 		MysqlTestUtils.assertListContents(fromDB);
 
-		fromDB = database.getHandledModActionMapping().fetchByTimestampForSubreddit(sub.id, new Timestamp(mAction.occurredAt.getTime() + 1000));
+		fromDB = database.getHandledModActionMapping().fetchByTimestampAndSubreddit(new Timestamp(mAction.occurredAt.getTime() + 1000), sub.id);
 		MysqlTestUtils.assertListContents(fromDB);
 		
 		HandledModAction mAction2 = new HandledModAction(-1, sub.id, "ModAction_ID2", new Timestamp(mAction.occurredAt.getTime() + 5000));
 		database.getHandledModActionMapping().save(mAction2);
 		
-		fromDB = database.getHandledModActionMapping().fetchByTimestampForSubreddit(sub.id, mAction2.occurredAt);
+		fromDB = database.getHandledModActionMapping().fetchByTimestampAndSubreddit(mAction2.occurredAt, sub.id);
 		MysqlTestUtils.assertListContents(fromDB, mAction2);
 		
 		HandledModAction mAction3 = new HandledModAction(-1, sub.id, "ModAction_ID3", new Timestamp(mAction2.occurredAt.getTime()));
 		database.getHandledModActionMapping().save(mAction3);
 		
-		fromDB = database.getHandledModActionMapping().fetchByTimestampForSubreddit(sub.id, mAction2.occurredAt);
+		fromDB = database.getHandledModActionMapping().fetchByTimestampAndSubreddit(mAction2.occurredAt, sub.id);
 		MysqlTestUtils.assertListContents(fromDB, mAction2, mAction3);
 	}
 	
-	@SuppressWarnings("deprecation")
 	@Test
 	public void testFetchLatestBySubreddit() {
 		MonitoredSubreddit sub = new MonitoredSubreddit(-1, "johnssub", false, false, true);
 		database.getMonitoredSubredditMapping().save(sub);
 		
 		final long now = System.currentTimeMillis();
-		List<HandledModAction> fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(now), 10);
+		List<HandledModAction> fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(now), null, 10);
 		MysqlTestUtils.assertListContents(fromDB);
 		
 		HandledModAction mAction = new HandledModAction(-1, sub.id, "ModAction_ID1", new Timestamp(now));
@@ -131,32 +129,29 @@ public class HandledModActionMappingTest {
 		
 		final long nowRounded = mAction.occurredAt.getTime();
 		
-		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(nowRounded), 10);
-		MysqlTestUtils.assertListContents("now=" + now + ", nowRounded=" + nowRounded, fromDB);
+		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(nowRounded), null, 10);
+		MysqlTestUtils.assertListContents("now=" + now + ", nowRounded=" + nowRounded, fromDB, mAction);
 		
 		
-		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(nowRounded - 1000), 10);
+		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(nowRounded - 1000), null, 10);
 		MysqlTestUtils.assertListContents(fromDB, mAction);
 		
-		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id + 1, new Timestamp(nowRounded - 1000), 10);
+		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id + 1, new Timestamp(nowRounded - 1000), null, 10);
 		MysqlTestUtils.assertListContents(fromDB);
 		
 		HandledModAction mAction2 = new HandledModAction(-1, sub.id, "ModAction_ID2", new Timestamp(nowRounded + 1000));
 		database.getHandledModActionMapping().save(mAction2);
 		
-		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(nowRounded), 10);
-		MysqlTestUtils.assertListContents(fromDB, mAction2);
+		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(nowRounded), null, 10);
+		MysqlTestUtils.assertListContents(fromDB, mAction, mAction2);
 		
-		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(mAction2.occurredAt.getTime()), 10);
-		MysqlTestUtils.assertListContents(fromDB);
+		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(mAction2.occurredAt.getTime()), null, 10);
+		MysqlTestUtils.assertListContents(fromDB, mAction2);
 
-		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(nowRounded - 1000), 10);
+		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(nowRounded - 1000), null, 10);
 		MysqlTestUtils.assertListContents(fromDB, mAction, mAction2);	
 
-		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(nowRounded - 1000), 1);
-		assertEquals(1, fromDB.size());
-		if(!fromDB.contains(mAction)) {
-			MysqlTestUtils.assertContains(fromDB, mAction2);
-		}
+		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(nowRounded - 1000), null, 1);
+		MysqlTestUtils.assertListContents(fromDB, mAction);
 	}
 }

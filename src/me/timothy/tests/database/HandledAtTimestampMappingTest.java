@@ -45,7 +45,7 @@ public class HandledAtTimestampMappingTest {
 		List<HandledAtTimestamp> fromDB = database.getHandledAtTimestampMapping().fetchAll();
 		MysqlTestUtils.assertListContents(fromDB);
 		
-		HandledAtTimestamp hat = new HandledAtTimestamp(sub.id, hma.id);
+		HandledAtTimestamp hat = new HandledAtTimestamp(sub.id, sub.id, hma.id);
 		database.getHandledAtTimestampMapping().save(hat);
 		
 		fromDB = database.getHandledAtTimestampMapping().fetchAll();
@@ -80,87 +80,100 @@ public class HandledAtTimestampMappingTest {
 	}
 	
 	@Test
-	public void testFetchBySubreddit() {
+	public void testFetchBySubIDs() {
 		runSpecificTestSituationOne(new TestSituationOneTester() {
 
 			@Override
 			public void runTestInSit1(MonitoredSubreddit johnsSub, MonitoredSubreddit paulsSub,
 					HandledModAction hmaJohn1, HandledModAction hmaJohn2, HandledModAction hmaPaul1,
 					HandledModAction hmaPaul2) {
-				List<HandledAtTimestamp> fromDB = database.getHandledAtTimestampMapping().fetchByMonitoredSubredditID(johnsSub.id);
+				List<HandledAtTimestamp> fromDB = database.getHandledAtTimestampMapping().fetchBySubIDs(johnsSub.id, johnsSub.id);
 				MysqlTestUtils.assertListContents(fromDB);
 				
-				HandledAtTimestamp hat1 = new HandledAtTimestamp(johnsSub.id, hmaJohn1.id);
+				HandledAtTimestamp hat1 = new HandledAtTimestamp(johnsSub.id, johnsSub.id, hmaJohn1.id);
 				database.getHandledAtTimestampMapping().save(hat1);
 				
-				fromDB = database.getHandledAtTimestampMapping().fetchByMonitoredSubredditID(johnsSub.id);
+				fromDB = database.getHandledAtTimestampMapping().fetchBySubIDs(johnsSub.id, johnsSub.id);
 				MysqlTestUtils.assertListContents(fromDB, hat1);
 				
-				fromDB = database.getHandledAtTimestampMapping().fetchByMonitoredSubredditID(paulsSub.id);
+				fromDB = database.getHandledAtTimestampMapping().fetchBySubIDs(paulsSub.id, paulsSub.id);
 				MysqlTestUtils.assertListContents(fromDB);
 				
-				HandledAtTimestamp hat2 = new HandledAtTimestamp(johnsSub.id, hmaJohn2.id);
+				HandledAtTimestamp hat2 = new HandledAtTimestamp(johnsSub.id, johnsSub.id, hmaJohn2.id);
 				database.getHandledAtTimestampMapping().save(hat2);
 
-				fromDB = database.getHandledAtTimestampMapping().fetchByMonitoredSubredditID(johnsSub.id);
+				fromDB = database.getHandledAtTimestampMapping().fetchBySubIDs(johnsSub.id, johnsSub.id);
 				MysqlTestUtils.assertListContents(fromDB, hat1, hat2);
 				
-				fromDB = database.getHandledAtTimestampMapping().fetchByMonitoredSubredditID(paulsSub.id);
+				fromDB = database.getHandledAtTimestampMapping().fetchBySubIDs(johnsSub.id, paulsSub.id);
+				MysqlTestUtils.assertListContents(fromDB);
+				
+				fromDB = database.getHandledAtTimestampMapping().fetchBySubIDs(paulsSub.id, johnsSub.id);
 				MysqlTestUtils.assertListContents(fromDB);
 				
 
-				HandledAtTimestamp hat3 = new HandledAtTimestamp(paulsSub.id, hmaPaul2.id);
+				HandledAtTimestamp hat3 = new HandledAtTimestamp(johnsSub.id, paulsSub.id, hmaPaul2.id);
 				database.getHandledAtTimestampMapping().save(hat3);
 
-				fromDB = database.getHandledAtTimestampMapping().fetchByMonitoredSubredditID(johnsSub.id);
+				fromDB = database.getHandledAtTimestampMapping().fetchBySubIDs(johnsSub.id, johnsSub.id);
 				MysqlTestUtils.assertListContents(fromDB, hat1, hat2);
 				
-				fromDB = database.getHandledAtTimestampMapping().fetchByMonitoredSubredditID(paulsSub.id);
+				fromDB = database.getHandledAtTimestampMapping().fetchBySubIDs(johnsSub.id, paulsSub.id);
 				MysqlTestUtils.assertListContents(fromDB, hat3);
+				
+				fromDB = database.getHandledAtTimestampMapping().fetchBySubIDs(paulsSub.id, paulsSub.id);
+				MysqlTestUtils.assertListContents(fromDB);
 			}
 			
 		});
 	}
 	
 	@Test
-	public void testDeleteByMonitoredSubredditID() {
+	public void testDeleteBySubIDs() {
 		runSpecificTestSituationOne(new TestSituationOneTester() {
 
 			@Override
 			public void runTestInSit1(MonitoredSubreddit johnsSub, MonitoredSubreddit paulsSub,
 					HandledModAction hmaJohn1, HandledModAction hmaJohn2, HandledModAction hmaPaul1,
 					HandledModAction hmaPaul2) {
-				List<HandledAtTimestamp> fromDB = database.getHandledAtTimestampMapping().fetchByMonitoredSubredditID(johnsSub.id);
+				List<HandledAtTimestamp> fromDB = database.getHandledAtTimestampMapping().fetchBySubIDs(johnsSub.id, johnsSub.id);
 				MysqlTestUtils.assertListContents(fromDB);
 				
-				HandledAtTimestamp hat1 = new HandledAtTimestamp(johnsSub.id, hmaJohn1.id);
+				HandledAtTimestamp hat1 = new HandledAtTimestamp(johnsSub.id, johnsSub.id, hmaJohn1.id);
 				database.getHandledAtTimestampMapping().save(hat1);
 				
 				fromDB = database.getHandledAtTimestampMapping().fetchAll();
 				MysqlTestUtils.assertListContents(fromDB, hat1);
 				
-				HandledAtTimestamp hat2 = new HandledAtTimestamp(johnsSub.id, hmaJohn2.id);
+				HandledAtTimestamp hat2 = new HandledAtTimestamp(johnsSub.id, johnsSub.id, hmaJohn2.id);
 				database.getHandledAtTimestampMapping().save(hat2);
 
 				fromDB = database.getHandledAtTimestampMapping().fetchAll();
 				MysqlTestUtils.assertListContents(fromDB, hat1, hat2);
 				
-				database.getHandledAtTimestampMapping().deleteByMonitoredSubredditID(paulsSub.id);
+				database.getHandledAtTimestampMapping().deleteBySubIDs(johnsSub.id, paulsSub.id);
+				fromDB = database.getHandledAtTimestampMapping().fetchAll();
+				MysqlTestUtils.assertListContents(fromDB, hat1, hat2);
+
+				database.getHandledAtTimestampMapping().deleteBySubIDs(paulsSub.id, paulsSub.id);
+				fromDB = database.getHandledAtTimestampMapping().fetchAll();
+				MysqlTestUtils.assertListContents(fromDB, hat1, hat2);
+
+				database.getHandledAtTimestampMapping().deleteBySubIDs(paulsSub.id, johnsSub.id);
+				fromDB = database.getHandledAtTimestampMapping().fetchAll();
 				MysqlTestUtils.assertListContents(fromDB, hat1, hat2);
 				
-				HandledAtTimestamp hat3 = new HandledAtTimestamp(paulsSub.id, hmaPaul2.id);
+				HandledAtTimestamp hat3 = new HandledAtTimestamp(johnsSub.id, paulsSub.id, hmaPaul2.id);
 				database.getHandledAtTimestampMapping().save(hat3);
 
 				fromDB = database.getHandledAtTimestampMapping().fetchAll();
 				MysqlTestUtils.assertListContents(fromDB, hat1, hat2, hat3);
-				
-				database.getHandledAtTimestampMapping().deleteByMonitoredSubredditID(johnsSub.id);
 
+				database.getHandledAtTimestampMapping().deleteBySubIDs(johnsSub.id, johnsSub.id);
 				fromDB = database.getHandledAtTimestampMapping().fetchAll();
 				MysqlTestUtils.assertListContents(fromDB, hat3);
-				
-				database.getHandledAtTimestampMapping().deleteByMonitoredSubredditID(paulsSub.id);
 
+				database.getHandledAtTimestampMapping().deleteBySubIDs(johnsSub.id, paulsSub.id);
 				fromDB = database.getHandledAtTimestampMapping().fetchAll();
 				MysqlTestUtils.assertListContents(fromDB);
 			}

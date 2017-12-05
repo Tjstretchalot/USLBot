@@ -11,17 +11,19 @@ import me.timothy.bots.models.HandledAtTimestamp;
  */
 public interface HandledAtTimestampMapping extends ObjectMapping<HandledAtTimestamp> {
 	/**
-	 * Fetch all HandledAtTimestamp for the specified monitoredSubredditID.
+	 * Fetch all HandledAtTimestamp for the specified major/minor subreddit pair
 	 * 
-	 * @param monitoredSubredditID the monitoerd subreddit
+	 * @param majorSubredditID subreddit doing the propagating
+	 * @param minorSubredditID subreddit being propagated
 	 * @return the list of handled mod action ids that have been handled for that subreddit at the latest timestamp
 	 */
-	public List<HandledAtTimestamp> fetchByMonitoredSubredditID(int monitoredSubredditID);
+	public List<HandledAtTimestamp> fetchBySubIDs(int majorSubredditID, int minorSubredditID);
 	
 	/**
-	 * Delete all HandledAtTimestamps for the specified monitored subreddit id
+	 * Delete all HandledAtTimestamps for the specified major/minor subreddit pair
 	 * 
-	 * @param monitoredSubredditID the subreddit to remove all from
+	 * @param majorSubredditID the subreddit doing the propagating
+	 * @param minorSubredditID the subreddit being propagated
 	 */
-	public void deleteByMonitoredSubredditID(int monitoredSubredditID);
+	public void deleteBySubIDs(int majorSubredditID, int minorSubredditID);
 }

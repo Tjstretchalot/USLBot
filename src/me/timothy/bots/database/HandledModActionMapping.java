@@ -30,8 +30,19 @@ public interface HandledModActionMapping extends ObjectMapping<HandledModAction>
 	 * 
 	 * @param timestamp the time stamp
 	 * @return handled mod actions with that timestamp
+	 * @deprecated use with subreddit
 	 */
 	public List<HandledModAction> fetchByTimestamp(Timestamp timestamp);
+	
+	/**
+	 * Fetch the handled mod actions that occurred at the specified timestamp
+	 * for the specified subreddit id
+	 * 
+	 * @param timestamp the timestamp
+	 * @param subredditID the subreddit id
+	 * @return handled mod actions meeting the specified criteria
+	 */
+	public List<HandledModAction> fetchByTimestampAndSubreddit(Timestamp timestamp, int subredditID);
 	
 	/**
 	 * Fetch handled mod actions between the specified timestamps
@@ -40,32 +51,20 @@ public interface HandledModActionMapping extends ObjectMapping<HandledModAction>
 	 * @param before before time
 	 * @param num number
 	 * @return up to num handled mod actions strictly later than after
+	 * @deprecated use with subreddit
 	 */
 	public List<HandledModAction> fetchLatest(Timestamp after, Timestamp before, int num);
 	
 	/**
-	 * Reddit only uses second-precision on its result, so theres a very
-	 * good chance of timestamp collisions. It's important to handle these.
+	 * Fetch handled mod actions for the specified subreddit that is between
+	 * the specified timestamps
 	 * 
-	 * @param monitoredSubredditID the subreddit
-	 * @param timestamp the timestamp
-	 * @return the list of handled mod actions at the given timestamp for the specified subreddit
-	 * @deprecated this function is not useful. use fetchByTimestamp
+	 * @param subredditID the id for the subreddit
+	 * @param after after time
+	 * @param before before time or null for any
+	 * @param num maximum number of results
+	 * @return up to num hma's with mon_sub_id subreddit at or later than after and strictly before before
 	 */
-	@Deprecated
-	public List<HandledModAction> fetchByTimestampForSubreddit(int monitoredSubredditID, Timestamp timestamp);
-	
-	/**
-	 * Fetches at most num HandledModActions, such that occurredAt is strictly
-	 * greater than after.
-	 * 
-	 * @param monitoredSubredditID the subreddit
-	 * @param after the id to fetch results after
-	 * @param num the maximum number of results returned
-	 * @return at most num HandledModAction with id>after in ascending order
-	 * @deprecated this function is not useful. use fetchLatest
-	 */
-	@Deprecated
-	public List<HandledModAction> fetchLatestForSubreddit(int monitoredSubredditID, Timestamp after, int num);
+	public List<HandledModAction> fetchLatestForSubreddit(int subredditID, Timestamp after, Timestamp before, int num);
 	
 }

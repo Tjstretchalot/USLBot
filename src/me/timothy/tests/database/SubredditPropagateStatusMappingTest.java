@@ -43,15 +43,15 @@ public class SubredditPropagateStatusMappingTest {
 		MonitoredSubreddit subA = new MonitoredSubreddit(-1, "johnssub", false, false, false);
 		database.getMonitoredSubredditMapping().save(subA);
 		
-		SubredditPropagateStatus subAStatus = new SubredditPropagateStatus(-1, subA.id, null, null);
-		database.getSubredditPropagateStatusMapping().save(subAStatus);
+		SubredditPropagateStatus subAsubAStatus = new SubredditPropagateStatus(-1, subA.id, subA.id, null, null);
+		database.getSubredditPropagateStatusMapping().save(subAsubAStatus);
 		
-		assertTrue(subAStatus.id > 0);
-		assertNotNull(subAStatus.updatedAt);
-		assertTrue(Math.abs(subAStatus.updatedAt.getTime() - System.currentTimeMillis()) < 10000);
+		assertTrue(subAsubAStatus.id > 0);
+		assertNotNull(subAsubAStatus.updatedAt);
+		assertTrue(Math.abs(subAsubAStatus.updatedAt.getTime() - System.currentTimeMillis()) < 10000);
 		
-		int oldID = subAStatus.id;
-		long oldUpdatedAt = subAStatus.updatedAt.getTime();
+		int oldID = subAsubAStatus.id;
+		long oldUpdatedAt = subAsubAStatus.updatedAt.getTime();
 		
 		Thread.sleep(2000);
 		
@@ -60,13 +60,13 @@ public class SubredditPropagateStatusMappingTest {
 		
 		assertNotEquals(subA.id, subB.id);
 		
-		subAStatus.monitoredSubredditID = subB.id;
-		database.getSubredditPropagateStatusMapping().save(subAStatus);
+		subAsubAStatus.minorSubredditID = subB.id;
+		database.getSubredditPropagateStatusMapping().save(subAsubAStatus);
 
-		assertEquals(oldID, subAStatus.id);
-		assertNotEquals(oldUpdatedAt, subAStatus.updatedAt.getTime());
-		assertTrue(oldUpdatedAt < subAStatus.updatedAt.getTime());
-		MysqlTestUtils.assertListContents(database.getSubredditPropagateStatusMapping().fetchAll(), subAStatus);
+		assertEquals(oldID, subAsubAStatus.id);
+		assertNotEquals(oldUpdatedAt, subAsubAStatus.updatedAt.getTime());
+		assertTrue(oldUpdatedAt < subAsubAStatus.updatedAt.getTime());
+		MysqlTestUtils.assertListContents(database.getSubredditPropagateStatusMapping().fetchAll(), subAsubAStatus);
 	}
 	
 	/**
@@ -91,32 +91,32 @@ public class SubredditPropagateStatusMappingTest {
 		MonitoredSubreddit subB = new MonitoredSubreddit(-1, "paulsub", false, false, false);
 		database.getMonitoredSubredditMapping().save(subB);
 		
-		SubredditPropagateStatus fromDB = database.getSubredditPropagateStatusMapping().fetchForSubreddit(subA.id);
+		SubredditPropagateStatus fromDB = database.getSubredditPropagateStatusMapping().fetchForSubredditPair(subA.id, subA.id);
 		assertNull(fromDB);
 		
-		fromDB = database.getSubredditPropagateStatusMapping().fetchForSubreddit(subB.id);
+		fromDB = database.getSubredditPropagateStatusMapping().fetchForSubredditPair(subB.id, subB.id);
 		assertNull(fromDB);
 		
-		SubredditPropagateStatus subAStatus = new SubredditPropagateStatus(-1, subA.id, null, null);
+		SubredditPropagateStatus subAStatus = new SubredditPropagateStatus(-1, subA.id, subA.id, null, null);
 		database.getSubredditPropagateStatusMapping().save(subAStatus);
 		
-		fromDB = database.getSubredditPropagateStatusMapping().fetchForSubreddit(subA.id);
+		fromDB = database.getSubredditPropagateStatusMapping().fetchForSubredditPair(subA.id, subA.id);
 		assertNotNull(fromDB);
 		assertEquals(subAStatus, fromDB);
 
-		fromDB = database.getSubredditPropagateStatusMapping().fetchForSubreddit(subB.id);
+		fromDB = database.getSubredditPropagateStatusMapping().fetchForSubredditPair(subA.id, subB.id);
 		assertNull(fromDB);
 
-		SubredditPropagateStatus subBStatus = new SubredditPropagateStatus(-1, subB.id, null, null);
+		SubredditPropagateStatus subBStatus = new SubredditPropagateStatus(-1, subA.id, subB.id, null, null);
 		database.getSubredditPropagateStatusMapping().save(subBStatus);
 		
 		assertNotEquals(subAStatus.id, subBStatus.id);
 		
-		fromDB = database.getSubredditPropagateStatusMapping().fetchForSubreddit(subA.id);
+		fromDB = database.getSubredditPropagateStatusMapping().fetchForSubredditPair(subA.id, subA.id);
 		assertNotNull(fromDB);
 		assertEquals(subAStatus, fromDB);
 
-		fromDB = database.getSubredditPropagateStatusMapping().fetchForSubreddit(subB.id);
+		fromDB = database.getSubredditPropagateStatusMapping().fetchForSubredditPair(subA.id, subB.id);
 		assertNotNull(fromDB);
 		assertEquals(subBStatus, fromDB);
 	}
