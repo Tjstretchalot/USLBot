@@ -23,7 +23,8 @@ import org.junit.runners.Suite.SuiteClasses;
 			MysqlSubredditTraditionalListStatusMappingTest.class,
 			MysqlLastInfoPMMappingTest.class,
 			MysqlRegisterAccountMappingTest.class,
-			MysqlResetPasswordRequestMappingTest.class
+			MysqlResetPasswordRequestMappingTest.class,
+			MysqlActionLogMappingTest.class
 		})
 public class MysqlDatabaseTests {
 

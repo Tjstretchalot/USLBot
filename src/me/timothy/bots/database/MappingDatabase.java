@@ -25,4 +25,5 @@ public interface MappingDatabase {
 	public SiteSessionMapping getSiteSessionMapping();
 	public RegisterAccountRequestMapping getRegisterAccountRequestMapping();
 	public ResetPasswordRequestMapping getResetPasswordRequestMapping(); 
+	public ActionLogMapping getActionLogMapping();
 }

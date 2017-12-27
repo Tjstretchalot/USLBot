@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 import org.apache.logging.log4j.Level;
 import org.json.simple.parser.ParseException;
 
+import me.timothy.bots.database.ActionLogMapping;
 import me.timothy.bots.memory.ModmailPMInformation;
 import me.timothy.bots.memory.PropagateResult;
 import me.timothy.bots.memory.TraditionalScammerHandlerResult;
@@ -76,33 +77,44 @@ public class USLBotDriver extends BotDriver {
 
 	@Override
 	protected void doLoop() throws IOException, ParseException, java.text.ParseException {
+		ActionLogMapping al = ((USLDatabase)database).getActionLogMapping();
+		
+		al.append("Considering relogging in..");
 		logger.trace("Considering relogging in..");
 		maybeLoginAgain();
 		
 		logger.trace("Updating tracked subreddits..");
 		updateTrackedSubreddits();
 		
+		al.append("Sending out account request messages..");
 		logger.trace("Sending out account request messages..");
 		sendAccountRequestMessages();
 		
+		al.append("Sending out reset password messages..");
 		logger.trace("Sending out reset password messages..");
 		sendResetPasswordMessages();
 		
+		al.append("Checking personal messages..");
 		logger.trace("Checking personal messages..");
 		scanPersonalMessages();
 		
+		al.append("Handling unban requests..");
 		logger.trace("Handling unban requests..");
 		handleUnbanRequests();
 		
+		al.append("Propagating people that are on the traditional scammer list..");
 		logger.trace("Handling people on old style list..");
 		handleTraditionalScammers();
 		
+		al.append("Scanning for new mod actions on monitored subreddits..");
 		logger.trace("Scanning for new ban reports..");
 		scanForBans();
 		
+		al.append("Propagating bans to monitored subreddits..");
 		logger.trace("Propagating bans..");
 		propagateBans();
 		
+		al.append("Considering backing up database..");
 		logger.trace("Considering backing up database..");
 		considerBackupDatabase();
 	}
@@ -198,7 +210,9 @@ public class USLBotDriver extends BotDriver {
 	 */
 	protected void handleTraditionalScammers() {
 		USLDatabase db = (USLDatabase) database;
+		ActionLogMapping al = db.getActionLogMapping();
 		for(MonitoredSubreddit sub : monitoredSubreddits) {
+			al.append(String.format("Propagating traditional scammers to {link sub %d}..", sub.id));
 			SubredditTraditionalListStatus status = db.getSubredditTraditionalListStatusMapping().fetchBySubredditID(sub.id);
 			
 			if(status == null) {
@@ -274,8 +288,10 @@ public class USLBotDriver extends BotDriver {
 	 * @see #scanSubForBans(MonitoredSubreddit)
 	 */
 	protected void scanForBans() {
+		ActionLogMapping al = ((USLDatabase)database).getActionLogMapping();
 		for(MonitoredSubreddit sub : monitoredSubreddits) {
-			logger.trace("Scanning " + sub.subreddit + " for any new bans...");
+			al.append(String.format("Scanning {link subreddit %d} for any new mod actions..", sub.id));
+			logger.trace("Scanning " + sub.subreddit + " for any new bans..");
 			scanSubForBans(sub);
 		}
 	}
@@ -621,8 +637,10 @@ public class USLBotDriver extends BotDriver {
 	 * @return if we did something with reddit
 	 */
 	protected boolean handleBans(List<UserBanInformation> bans) {
+		ActionLogMapping al = ((USLDatabase)database).getActionLogMapping();
 		boolean didSomething = false;
 		for(UserBanInformation ban : bans) {
+			al.append(String.format("Banning {link person %d} on {link subreddit %d}..", ban.person.id, ban.subreddit.id));
 			logger.printf(Level.INFO, "Banning %s on %s..", ban.person.username, ban.subreddit.subreddit);
 			
 			handleBanUser(ban);
@@ -639,8 +657,10 @@ public class USLBotDriver extends BotDriver {
 	 * @return if we did something with reddit
 	 */
 	protected boolean handleUnbans(List<UserUnbanInformation> unbans) {
+		ActionLogMapping al = ((USLDatabase)database).getActionLogMapping();
 		boolean didSomething = false;
 		for(UserUnbanInformation unban : unbans) {
+			al.append(String.format("Unbanning {link person %d} on {link subreddit %d}..", unban.person.id, unban.subreddit.id));
 			logger.printf(Level.INFO, "Unbanning %s on %s..", unban.person.username, unban.subreddit.subreddit);
 			
 			handleUnbanUser(unban);
@@ -675,9 +695,11 @@ public class USLBotDriver extends BotDriver {
 	 * @return if we did something with reddit
 	 */
 	protected boolean handleUserPMs(List<UserPMInformation> userPMs) {
+		ActionLogMapping al = ((USLDatabase)database).getActionLogMapping();
 		boolean didSomething = false;
 		for(UserPMInformation userPm : userPMs) {
 			logger.printf(Level.INFO, "Sending some mail to %s (title=%s)", userPm.person.username, userPm.title);
+			al.append(String.format("Sending a personal message to {link user %d} (the title is %s)..", userPm.person.id, userPm.title));
 			Boolean succ = sendMessage(userPm.person.username, userPm.title, userPm.body);
 			
 			if(succ != null && succ.booleanValue()) {

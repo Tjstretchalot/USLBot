@@ -10,6 +10,7 @@ import java.util.Map;
 
 import org.apache.logging.log4j.Logger;
 
+import me.timothy.bots.database.ActionLogMapping;
 import me.timothy.bots.database.BanHistoryMapping;
 import me.timothy.bots.database.FullnameMapping;
 import me.timothy.bots.database.HandledAtTimestampMapping;
@@ -31,6 +32,7 @@ import me.timothy.bots.database.SubscribedHashtagMapping;
 import me.timothy.bots.database.TraditionalScammerMapping;
 import me.timothy.bots.database.UnbanHistoryMapping;
 import me.timothy.bots.database.UnbanRequestMapping;
+import me.timothy.bots.database.mysql.MysqlActionLogMapping;
 import me.timothy.bots.database.mysql.MysqlBanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlFullnameMapping;
 import me.timothy.bots.database.mysql.MysqlHandledAtTimestampMapping;
@@ -49,6 +51,7 @@ import me.timothy.bots.database.mysql.MysqlSubscribedHashtagMapping;
 import me.timothy.bots.database.mysql.MysqlTraditionalScammerMapping;
 import me.timothy.bots.database.mysql.MysqlUnbanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlUnbanRequestMapping;
+import me.timothy.bots.models.ActionLog;
 import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.Fullname;
 import me.timothy.bots.models.HandledAtTimestamp;
@@ -123,6 +126,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		addMapping(SiteSession.class, new MysqlSiteSessionMapping(this, connection));
 		addMapping(RegisterAccountRequest.class, new MysqlRegisterAccountRequestMapping(this, connection));
 		addMapping(ResetPasswordRequest.class, new MysqlResetPasswordRequestMapping(this, connection));
+		addMapping(ActionLog.class, new MysqlActionLogMapping(this, connection));
 	}
 
 	private <A> void addMapping(Class<A> cl, ObjectMapping<A> mapping) {
@@ -258,6 +262,11 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public ResetPasswordRequestMapping getResetPasswordRequestMapping() {
 		return (ResetPasswordRequestMapping) mappingsDict.get(ResetPasswordRequest.class);
+	}
+	
+	@Override
+	public ActionLogMapping getActionLogMapping() {
+		return (ActionLogMapping) mappingsDict.get(ActionLog.class);
 	}
 	
 	/**

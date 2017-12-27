@@ -7,6 +7,7 @@ import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import me.timothy.bots.database.ActionLogMapping;
 import me.timothy.bots.functions.PropagateResultHandlerFunction;
 import me.timothy.bots.memory.PropagateResult;
 import me.timothy.bots.models.BanHistory;
@@ -87,8 +88,10 @@ public class USLPropagatorManager {
 	 * specified in the constructor.
 	 */
 	public void managePropagating(List<MonitoredSubreddit> tracked) {
+		ActionLogMapping al = database.getActionLogMapping();
 		for(int i = 0; i < tracked.size(); i++) {
 			MonitoredSubreddit major = tracked.get(i);
+			al.append(String.format("Propagating mod actions to {link subreddit %d}..", major.id));
 			for(int j = 0; j < tracked.size(); j++) {
 				MonitoredSubreddit minor = tracked.get(j);
 				logger.trace("Managing propagating from " + minor.subreddit + " to " + major.subreddit);

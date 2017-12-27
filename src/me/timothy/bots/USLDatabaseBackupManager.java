@@ -16,6 +16,9 @@ import org.apache.logging.log4j.Logger;
 import com.jcraft.jsch.Channel;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.ChannelSftp.LsEntry;
+
+import me.timothy.bots.database.ActionLogMapping;
+
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
@@ -69,6 +72,8 @@ public class USLDatabaseBackupManager {
 		if(nextBackupUTC > now) {
 			return;
 		}
+		ActionLogMapping al = database.getActionLogMapping();
+		al.append("Initiating database backup..");
 		
 		logger.info("Initiating database backup..");
 		logger.debug("Disconnecting from MySQL database..");
@@ -96,6 +101,7 @@ public class USLDatabaseBackupManager {
 			logger.throwing(e);
 			throw new RuntimeException(e);
 		}
+		al.append("Database backup complete.");
 	}
 	/**
 	 * Decides where to save the backup file initially.
