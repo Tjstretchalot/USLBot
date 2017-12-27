@@ -120,6 +120,7 @@ public class USLBotDriver extends BotDriver {
 		al.append("Considering backing up database..");
 		logger.trace("Considering backing up database..");
 		considerBackupDatabase();
+		al = ((USLDatabase)database).getActionLogMapping();
 		
 		al.append("Waiting for a bit..");
 	}

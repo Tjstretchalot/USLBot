@@ -103,6 +103,7 @@ public class USLDatabaseBackupManager {
 		logger.debug("Reconnecting to MySQL database..");
 		try {
 			database.connect(config.getProperty("database.username"), config.getProperty("database.password"), config.getProperty("database.url"));
+			al = database.getActionLogMapping();
 			if(!succ) {
 				al.append("Failed to send the database backup file to the backup server! It may be offline.");
 			}
