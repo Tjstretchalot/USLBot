@@ -66,7 +66,11 @@ public class USLBackupTransferManager {
 				throw new RuntimeException("Unexpected FTP reply code " + reply);
 			}
 			
-			logger.printf(Level.TRACE, "Successfully connected. Logging in..");
+			
+			logger.printf(Level.TRACE, "Successfully connected. Changing So timeout to 5 seconds...");
+			client.setSoTimeout(5000);
+			
+			logger.printf(Level.TRACE, "So timeout set, logging in...");
 			boolean loginSuccess = client.login(ftpUser, ftpPass);
 			
 			if(!loginSuccess) {
