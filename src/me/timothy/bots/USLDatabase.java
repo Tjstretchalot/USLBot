@@ -3,6 +3,10 @@ package me.timothy.bots;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.apache.logging.log4j.Logger;
 
@@ -13,6 +17,7 @@ import me.timothy.bots.database.HandledModActionMapping;
 import me.timothy.bots.database.LastInfoPMMapping;
 import me.timothy.bots.database.MappingDatabase;
 import me.timothy.bots.database.MonitoredSubredditMapping;
+import me.timothy.bots.database.ObjectMapping;
 import me.timothy.bots.database.PersonMapping;
 import me.timothy.bots.database.RegisterAccountRequestMapping;
 import me.timothy.bots.database.ResetPasswordRequestMapping;
@@ -44,7 +49,24 @@ import me.timothy.bots.database.mysql.MysqlSubscribedHashtagMapping;
 import me.timothy.bots.database.mysql.MysqlTraditionalScammerMapping;
 import me.timothy.bots.database.mysql.MysqlUnbanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlUnbanRequestMapping;
+import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.Fullname;
+import me.timothy.bots.models.HandledAtTimestamp;
+import me.timothy.bots.models.HandledModAction;
+import me.timothy.bots.models.LastInfoPM;
+import me.timothy.bots.models.MonitoredSubreddit;
+import me.timothy.bots.models.Person;
+import me.timothy.bots.models.RegisterAccountRequest;
+import me.timothy.bots.models.ResetPasswordRequest;
+import me.timothy.bots.models.Response;
+import me.timothy.bots.models.SiteSession;
+import me.timothy.bots.models.SubredditModqueueProgress;
+import me.timothy.bots.models.SubredditPropagateStatus;
+import me.timothy.bots.models.SubredditTraditionalListStatus;
+import me.timothy.bots.models.SubscribedHashtag;
+import me.timothy.bots.models.TraditionalScammer;
+import me.timothy.bots.models.UnbanHistory;
+import me.timothy.bots.models.UnbanRequest;
 
 /**
  * The database for the universal scammer list.
@@ -56,43 +78,9 @@ public class USLDatabase extends Database implements MappingDatabase {
 	private Logger logger;
 	private Connection connection;
 	
-	private FullnameMapping fullnameMapping;
-	private MonitoredSubredditMapping monitoredSubredditMapping;
-	private PersonMapping personMapping;
-	private HandledModActionMapping handledModActionMapping;
-	private BanHistoryMapping banHistoryMapping;
-	private ResponseMapping responseMapping;
-	private SubscribedHashtagMapping subscribedHashtagMapping;
-	private SubredditModqueueProgressMapping subredditModqueueProgressMapping;
-	private SubredditPropagateStatusMapping subredditPropagateStatusMapping;
-	private UnbanHistoryMapping unbanHistoryMapping;
-	private HandledAtTimestampMapping handledAtTimestampMapping;
-	private TraditionalScammerMapping traditionalScammerMapping;
-	private UnbanRequestMapping unbanRequestMapping;
-	private SubredditTraditionalListStatusMapping subredditTraditionalListStatusMapping; 
-	private LastInfoPMMapping lastInfoPMMapping;
-	private SiteSessionMapping siteSessionMapping;
-	private RegisterAccountRequestMapping registerAccountRequestMapping;
-	private ResetPasswordRequestMapping resetPasswordRequestMapping;
+	private List<ObjectMapping<?>> mappings;
+	private Map<Class<?>, ObjectMapping<?>> mappingsDict;
 	
-	private SchemaValidator fullnameValidator;
-	private SchemaValidator monitoredSubredditValidator;
-	private SchemaValidator personValidator;
-	private SchemaValidator handledModActionValidator;
-	private SchemaValidator banHistoryValidator;
-	private SchemaValidator responseValidator;
-	private SchemaValidator subscribedHashtagValidator;
-	private SchemaValidator subredditModqueueProgressValidator;
-	private SchemaValidator subredditPropagateStatusValidator;
-	private SchemaValidator unbanHistoryValidator;
-	private SchemaValidator handledAtTimestampValidator;
-	private SchemaValidator traditionalScammerValidator;
-	private SchemaValidator unbanRequestValidator;
-	private SchemaValidator subredditTraditionalListStatusValidator;
-	private SchemaValidator lastInfoPMValidator;
-	private SchemaValidator siteSessionValidator;
-	private SchemaValidator registerAccountRequestValidator;
-	private SchemaValidator resetPasswordRequestValidator;
 	
 	/**
 	 * Connects to the specified database. If there is an active connection
@@ -114,96 +102,33 @@ public class USLDatabase extends Database implements MappingDatabase {
 		}
 		
 		connection = DriverManager.getConnection(url, username, password);
-		
-		fullnameMapping = new MysqlFullnameMapping(this, connection);
-		monitoredSubredditMapping = new MysqlMonitoredSubredditMapping(this, connection);
-		personMapping = new MysqlPersonMapping(this, connection);
-		handledModActionMapping = new MysqlHandledModActionMapping(this, connection);
-		banHistoryMapping = new MysqlBanHistoryMapping(this, connection);
-		responseMapping = new MysqlResponseMapping(this, connection);
-		subscribedHashtagMapping = new MysqlSubscribedHashtagMapping(this, connection);
-		subredditModqueueProgressMapping = new MysqlSubredditModqueueProgressMapping(this, connection);
-		subredditPropagateStatusMapping = new MysqlSubredditPropagateStatusMapping(this, connection);
-		unbanHistoryMapping = new MysqlUnbanHistoryMapping(this, connection);
-		handledAtTimestampMapping = new MysqlHandledAtTimestampMapping(this, connection);
-		traditionalScammerMapping = new MysqlTraditionalScammerMapping(this, connection);
-		unbanRequestMapping = new MysqlUnbanRequestMapping(this, connection);
-		subredditTraditionalListStatusMapping = new MysqlSubredditTraditionalListStatusMapping(this, connection);
-		lastInfoPMMapping = new MysqlLastInfoPMMapping(this, connection);
-		siteSessionMapping = new MysqlSiteSessionMapping(this, connection);
-		registerAccountRequestMapping = new MysqlRegisterAccountRequestMapping(this, connection);
-		resetPasswordRequestMapping = new MysqlResetPasswordRequestMapping(this, connection);
-		
-		fullnameValidator = (SchemaValidator) fullnameMapping;
-		monitoredSubredditValidator = (SchemaValidator) monitoredSubredditMapping;
-		personValidator = (SchemaValidator) personMapping;
-		handledModActionValidator = (SchemaValidator) handledModActionMapping;
-		banHistoryValidator = (SchemaValidator) banHistoryMapping;
-		responseValidator = (SchemaValidator) responseMapping;
-		subscribedHashtagValidator = (SchemaValidator) subscribedHashtagMapping;
-		subredditModqueueProgressValidator = (SchemaValidator) subredditModqueueProgressMapping;
-		subredditPropagateStatusValidator = (SchemaValidator) subredditPropagateStatusMapping;
-		unbanHistoryValidator = (SchemaValidator) unbanHistoryMapping;
-		handledAtTimestampValidator = (SchemaValidator) handledAtTimestampMapping;
-		traditionalScammerValidator = (SchemaValidator) traditionalScammerMapping;
-		unbanRequestValidator = (SchemaValidator) unbanRequestMapping;
-		subredditTraditionalListStatusValidator = (SchemaValidator) subredditTraditionalListStatusMapping;
-		lastInfoPMValidator = (SchemaValidator) lastInfoPMMapping;
-		siteSessionValidator = (SchemaValidator) siteSessionMapping;
-		registerAccountRequestValidator = (SchemaValidator) registerAccountRequestMapping;
-		resetPasswordRequestValidator = (SchemaValidator) resetPasswordRequestMapping;
+
+		mappings = new ArrayList<>();
+		mappingsDict = new HashMap<>();
+		addMapping(Fullname.class, new MysqlFullnameMapping(this, connection));
+		addMapping(MonitoredSubreddit.class, new MysqlMonitoredSubredditMapping(this, connection));
+		addMapping(Person.class, new MysqlPersonMapping(this, connection));
+		addMapping(HandledModAction.class, new MysqlHandledModActionMapping(this, connection));
+		addMapping(BanHistory.class, new MysqlBanHistoryMapping(this, connection));
+		addMapping(Response.class, new MysqlResponseMapping(this, connection));
+		addMapping(SubscribedHashtag.class, new MysqlSubscribedHashtagMapping(this, connection));
+		addMapping(SubredditModqueueProgress.class, new MysqlSubredditModqueueProgressMapping(this, connection));
+		addMapping(SubredditPropagateStatus.class, new MysqlSubredditPropagateStatusMapping(this, connection));
+		addMapping(UnbanHistory.class, new MysqlUnbanHistoryMapping(this, connection));
+		addMapping(HandledAtTimestamp.class, new MysqlHandledAtTimestampMapping(this, connection));
+		addMapping(TraditionalScammer.class, new MysqlTraditionalScammerMapping(this, connection));
+		addMapping(UnbanRequest.class, new MysqlUnbanRequestMapping(this, connection));
+		addMapping(SubredditTraditionalListStatus.class, new MysqlSubredditTraditionalListStatusMapping(this, connection));
+		addMapping(LastInfoPM.class, new MysqlLastInfoPMMapping(this, connection));
+		addMapping(SiteSession.class, new MysqlSiteSessionMapping(this, connection));
+		addMapping(RegisterAccountRequest.class, new MysqlRegisterAccountRequestMapping(this, connection));
+		addMapping(ResetPasswordRequest.class, new MysqlResetPasswordRequestMapping(this, connection));
 	}
 
-	/**
-	 * Ensures the database is disconnected and will not return invalid
-	 * mappings (instead they will return null until the next connect)
-	 */
-	public void disconnect() {
-		try {
-			connection.close();
-		} catch (SQLException e) {
-			logger.throwing(e);
-		}
-
-		fullnameMapping = null;
-		monitoredSubredditMapping = null;
-		personMapping = null;
-		handledModActionMapping = null;
-		banHistoryMapping = null;
-		responseMapping = null;
-		subscribedHashtagMapping = null;
-		subredditModqueueProgressMapping = null;
-		subredditPropagateStatusMapping = null;
-		unbanHistoryMapping = null;
-		handledAtTimestampMapping = null;
-		traditionalScammerMapping = null;
-		unbanRequestMapping = null;
-		subredditTraditionalListStatusMapping = null;
-		lastInfoPMMapping = null;
-		siteSessionMapping = null;
-		registerAccountRequestMapping = null;
-		resetPasswordRequestMapping = null;
-		
-		fullnameValidator = null;
-		monitoredSubredditValidator = null;
-		personValidator = null;
-		handledModActionValidator = null;
-		banHistoryValidator = null;
-		responseValidator = null;
-		subscribedHashtagValidator = null;
-		subredditModqueueProgressValidator = null;
-		subredditPropagateStatusValidator = null;
-		unbanHistoryValidator = null;
-		handledAtTimestampValidator = null;
-		traditionalScammerValidator = null;
-		unbanRequestValidator = null;
-		subredditTraditionalListStatusValidator = null;
-		lastInfoPMValidator = null;
-		siteSessionValidator = null;
-		registerAccountRequestValidator = null;
-		resetPasswordRequestValidator = null;
+	private <A> void addMapping(Class<A> cl, ObjectMapping<A> mapping) {
+		mappings.add(mapping);
+		mappingsDict.put(cl, mapping);
 	}
-
 
 	/**
 	 * Purges everything from everything. Scary stuff.
@@ -211,25 +136,9 @@ public class USLDatabase extends Database implements MappingDatabase {
 	 * @see me.timothy.bots.database.SchemaValidator#purgeSchema()
 	 */
 	public void purgeAll() {
-		/* REVERSE ORDER of validateTableState */
-		resetPasswordRequestValidator.purgeSchema();
-		registerAccountRequestValidator.purgeSchema();
-		siteSessionValidator.purgeSchema();
-		lastInfoPMValidator.purgeSchema();
-		subredditTraditionalListStatusValidator.purgeSchema();
-		unbanRequestValidator.purgeSchema();
-		traditionalScammerValidator.purgeSchema();
-		handledAtTimestampValidator.purgeSchema();
-		unbanHistoryValidator.purgeSchema();
-		subredditPropagateStatusValidator.purgeSchema();
-		subredditModqueueProgressValidator.purgeSchema();
-		subscribedHashtagValidator.purgeSchema();
-		responseValidator.purgeSchema();
-		banHistoryValidator.purgeSchema();
-		handledModActionValidator.purgeSchema();
-		personValidator.purgeSchema();
-		monitoredSubredditValidator.purgeSchema();
-		fullnameValidator.purgeSchema();
+		for(int i = mappings.size() - 1; i >= 0; i--) {
+			((SchemaValidator)mappings.get(i)).purgeSchema();
+		}
 	}
 	
 	/**
@@ -241,114 +150,114 @@ public class USLDatabase extends Database implements MappingDatabase {
 	 * @see me.timothy.bots.database.SchemaValidator#validateSchema()
 	 */
 	public void validateTableState() {
-		fullnameValidator.validateSchema();
-		monitoredSubredditValidator.validateSchema();
-		personValidator.validateSchema();
-		handledModActionValidator.validateSchema();
-		banHistoryValidator.validateSchema();
-		responseValidator.validateSchema();
-		subscribedHashtagValidator.validateSchema();
-		subredditModqueueProgressValidator.validateSchema();
-		subredditPropagateStatusValidator.validateSchema();
-		unbanHistoryValidator.validateSchema();
-		handledAtTimestampValidator.validateSchema();
-		traditionalScammerValidator.validateSchema();
-		unbanRequestValidator.validateSchema();
-		subredditTraditionalListStatusValidator.validateSchema();
-		lastInfoPMValidator.validateSchema();
-		siteSessionValidator.validateSchema();
-		registerAccountRequestValidator.validateSchema();
-		resetPasswordRequestValidator.validateSchema();
+		for(int i = 0; i < mappings.size(); i++) {
+			((SchemaValidator)mappings.get(i)).validateSchema();
+		}
 	}
 	
-	@Override
+	/**
+	 * Ensures the database is disconnected and will not return invalid
+	 * mappings (instead they will return null until the next connect)
+	 */
+	public void disconnect() {
+		try {
+			connection.close();
+		} catch (SQLException e) {
+			logger.throwing(e);
+		}
+		
+		mappings = null;
+		mappingsDict = null;
+	}
+	
+	@Override 
 	public FullnameMapping getFullnameMapping() {
-		return fullnameMapping;
+		return (FullnameMapping) mappingsDict.get(Fullname.class);
 	}
 	
 	@Override
 	public MonitoredSubredditMapping getMonitoredSubredditMapping() {
-		return monitoredSubredditMapping;
+		return (MonitoredSubredditMapping) mappingsDict.get(MonitoredSubreddit.class);
 	}
 	
 	@Override
 	public PersonMapping getPersonMapping() {
-		return personMapping;
+		return (PersonMapping) mappingsDict.get(Person.class);
 	}
 	
 	@Override
 	public HandledModActionMapping getHandledModActionMapping() {
-		return handledModActionMapping;
+		return (HandledModActionMapping) mappingsDict.get(HandledModAction.class);
 	}
 	
 	@Override
 	public BanHistoryMapping getBanHistoryMapping() {
-		return banHistoryMapping;
+		return (BanHistoryMapping) mappingsDict.get(BanHistory.class);
 	}
 	
 	@Override
 	public ResponseMapping getResponseMapping() {
-		return responseMapping;
+		return (ResponseMapping) mappingsDict.get(Response.class);
 	}
 	
 	@Override
 	public SubscribedHashtagMapping getSubscribedHashtagMapping() {
-		return subscribedHashtagMapping;
+		return (SubscribedHashtagMapping) mappingsDict.get(SubscribedHashtag.class);
 	}
 	
 	@Override
 	public SubredditModqueueProgressMapping getSubredditModqueueProgressMapping() {
-		return subredditModqueueProgressMapping;
+		return (SubredditModqueueProgressMapping) mappingsDict.get(SubredditModqueueProgress.class);
 	}
 	
 	@Override
 	public SubredditPropagateStatusMapping getSubredditPropagateStatusMapping() {
-		return subredditPropagateStatusMapping;
+		return (SubredditPropagateStatusMapping) mappingsDict.get(SubredditPropagateStatus.class);
 	}
 	
 	@Override
 	public UnbanHistoryMapping getUnbanHistoryMapping() {
-		return unbanHistoryMapping;
+		return (UnbanHistoryMapping) mappingsDict.get(UnbanHistory.class);
 	}
 	
 	@Override
 	public HandledAtTimestampMapping getHandledAtTimestampMapping() {
-		return handledAtTimestampMapping;
+		return (HandledAtTimestampMapping) mappingsDict.get(HandledAtTimestamp.class);
 	}
 	
 	@Override
 	public TraditionalScammerMapping getTraditionalScammerMapping() {
-		return traditionalScammerMapping;
+		return (TraditionalScammerMapping) mappingsDict.get(TraditionalScammer.class);
 	}
 	
 	@Override
 	public UnbanRequestMapping getUnbanRequestMapping() {
-		return unbanRequestMapping;
+		return (UnbanRequestMapping) mappingsDict.get(UnbanRequest.class);
 	}
 	
 	@Override
 	public SubredditTraditionalListStatusMapping getSubredditTraditionalListStatusMapping() {
-		return subredditTraditionalListStatusMapping;
+		return (SubredditTraditionalListStatusMapping) mappingsDict.get(SubredditTraditionalListStatus.class);
 	}
 	
 	@Override
 	public LastInfoPMMapping getLastInfoPMMapping() {
-		return lastInfoPMMapping;
+		return (LastInfoPMMapping) mappingsDict.get(LastInfoPM.class);
 	}
 	
 	@Override
 	public SiteSessionMapping getSiteSessionMapping() {
-		return siteSessionMapping;
+		return (SiteSessionMapping) mappingsDict.get(SiteSession.class);
 	}
 	
 	@Override
 	public RegisterAccountRequestMapping getRegisterAccountRequestMapping() {
-		return registerAccountRequestMapping;
+		return (RegisterAccountRequestMapping) mappingsDict.get(RegisterAccountRequest.class);
 	}
 	
 	@Override
 	public ResetPasswordRequestMapping getResetPasswordRequestMapping() {
-		return resetPasswordRequestMapping;
+		return (ResetPasswordRequestMapping) mappingsDict.get(ResetPasswordRequest.class);
 	}
 	
 	/**
@@ -357,7 +266,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	 */
 	@Override
 	public void addFullname(String id) {
-		fullnameMapping.save(new Fullname(-1, id));
+		getFullnameMapping().save(new Fullname(-1, id));
 	}
 
 	/**
@@ -368,7 +277,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 	 */
 	@Override
 	public boolean containsFullname(String id) {
-		return fullnameMapping.contains(id);
+		return getFullnameMapping().contains(id);
 	}
 
 
