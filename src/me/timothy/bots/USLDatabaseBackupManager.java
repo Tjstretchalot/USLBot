@@ -90,7 +90,6 @@ public class USLDatabaseBackupManager {
 		boolean succ = sendDatabaseBackupFile(backupFile, now);
 		if(!succ) {
 			logger.error("Sending database backup file was unsuccessful!");
-			al.append("Failed to send the database backup file to the backup server! It may be offline.");
 		}
 		
 		
@@ -100,18 +99,21 @@ public class USLDatabaseBackupManager {
 		logger.debug("Choosing new backup time..");
 		selectNextBackupTime(now, succ);
 		logger.debug("Next backup time is " + nextBackupUTC);
-		Date asDate = new Date(nextBackupUTC);
-		DateFormat df = DateFormat.getDateTimeInstance();
-		al.append("Next backup attempt is at " + df.format(asDate));
 		
 		logger.debug("Reconnecting to MySQL database..");
 		try {
 			database.connect(config.getProperty("database.username"), config.getProperty("database.password"), config.getProperty("database.url"));
+			if(!succ) {
+				al.append("Failed to send the database backup file to the backup server! It may be offline.");
+			}
+			Date asDate = new Date(nextBackupUTC);
+			DateFormat df = DateFormat.getDateTimeInstance();
+			al.append("Next backup attempt is at " + df.format(asDate));
+			al.append("Database backup complete.");
 		} catch (SQLException e) {
 			logger.throwing(e);
 			throw new RuntimeException(e);
 		}
-		al.append("Database backup complete.");
 	}
 	/**
 	 * Decides where to save the backup file initially.
