@@ -122,13 +122,13 @@ public class USLPropagatorManager {
 			majorMinorStatus = initMajorMinorStatus(major, minor);
 		}
 		
-		int hmaCounter = 0;
+		int[] hmaCounter = new int[] { 0 };
 		// We use an array here to get the equivalent of C-like & 
 		int[] actionCounter = new int[] { 0 } ;
 		
 		final int MAX_HMAS = 250;
 		final int MAX_ACTIONS = 3;
-		while(hmaCounter < MAX_HMAS && actionCounter[0] < MAX_ACTIONS) {
+		while(hmaCounter[0] < MAX_HMAS && actionCounter[0] < MAX_ACTIONS) {
 			List<HandledAtTimestamp> hats = fetchHandledAtTimestamp(major, minor);
 			List<HandledModAction> hmas = fetchHandledModActions(major, minor, minorProgress, majorMinorStatus);
 			
@@ -136,16 +136,20 @@ public class USLPropagatorManager {
 				logger.trace("Nothing more from " + minor.subreddit + " to propagate to " + major.subreddit);
 				return;
 			}
+
+			int initialHmaCounter = hmaCounter[0];
 			
 			for(HandledModAction hma : hmas) {
-				handleHandledModAction(hma, major, minor, hats, actionCounter, majorMinorStatus);
-
-				hmaCounter++;
-				if(hmaCounter >= MAX_HMAS)
+				handleHandledModAction(hma, major, minor, hats, hmaCounter, actionCounter, majorMinorStatus);
+				
+				if(hmaCounter[0] >= MAX_HMAS)
 					break;
 				if(actionCounter[0] >= MAX_ACTIONS)
 					break;
 			}
+
+			if(initialHmaCounter == hmaCounter[0])
+				break;
 		}
 		
 		logger.printf(Level.TRACE, "Propagated %d hmas which required %d actions (config: %d max hmas, %d max actions)", hmaCounter, actionCounter[0], MAX_HMAS, MAX_ACTIONS);
@@ -165,10 +169,10 @@ public class USLPropagatorManager {
 	 * @param majorMinorStatus the status of propagating minor to major
 	 */
 	protected void handleHandledModAction(HandledModAction hma, MonitoredSubreddit major, MonitoredSubreddit minor,
-			List<HandledAtTimestamp> hats, int[] actionCounter, SubredditPropagateStatus majorMinorStatus) {
+			List<HandledAtTimestamp> hats, int[] actionCounter, int[] hmaCounter, SubredditPropagateStatus majorMinorStatus) {
 		if(hats.stream().anyMatch((hat) -> hat.handledModActionID == hma.id))
 			return;
-		
+		hmaCounter[0]++;
 		BanHistory bh = database.getBanHistoryMapping().fetchByHandledModActionID(hma.id);
 		if(bh != null) {
 			logger.trace("Propagating bh=" + bh);

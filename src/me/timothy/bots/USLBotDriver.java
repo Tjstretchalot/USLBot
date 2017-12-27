@@ -78,6 +78,9 @@ public class USLBotDriver extends BotDriver {
 	@Override
 	protected void doLoop() throws IOException, ParseException, java.text.ParseException {
 		ActionLogMapping al = ((USLDatabase)database).getActionLogMapping();
+		al.clear();
+		
+		al.append("{SIGSTART}");
 		
 		al.append("Considering relogging in..");
 		logger.trace("Considering relogging in..");
@@ -117,6 +120,8 @@ public class USLBotDriver extends BotDriver {
 		al.append("Considering backing up database..");
 		logger.trace("Considering backing up database..");
 		considerBackupDatabase();
+		
+		al.append("Waiting for a bit..");
 	}
 
 

@@ -17,6 +17,7 @@ import java.sql.Timestamp;
  * To improve readablity, the following are special commands to the outputter:
  *   {link person ID} - this should display to identify the person with the specified id
  *   {link subreddit ID} - this should display to identify the subreddit with the specified id
+ *   {SIGSTART} - this text alone should be done at the very top of the loop
  *   
  * 
  * @author Timothy
