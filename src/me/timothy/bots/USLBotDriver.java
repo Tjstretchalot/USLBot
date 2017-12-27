@@ -218,7 +218,7 @@ public class USLBotDriver extends BotDriver {
 		USLDatabase db = (USLDatabase) database;
 		ActionLogMapping al = db.getActionLogMapping();
 		for(MonitoredSubreddit sub : monitoredSubreddits) {
-			al.append(String.format("Propagating traditional scammers to {link sub %d}..", sub.id));
+			al.append(String.format("Propagating traditional scammers to {link subreddit %d}..", sub.id));
 			SubredditTraditionalListStatus status = db.getSubredditTraditionalListStatusMapping().fetchBySubredditID(sub.id);
 			
 			if(status == null) {
