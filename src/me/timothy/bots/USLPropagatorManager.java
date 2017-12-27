@@ -152,7 +152,7 @@ public class USLPropagatorManager {
 				break;
 		}
 		
-		logger.printf(Level.TRACE, "Propagated %d hmas which required %d actions (config: %d max hmas, %d max actions)", hmaCounter, actionCounter[0], MAX_HMAS, MAX_ACTIONS);
+		logger.printf(Level.TRACE, "Propagated %d hmas which required %d actions (config: %d max hmas, %d max actions)", hmaCounter[0], actionCounter[0], MAX_HMAS, MAX_ACTIONS);
 	}
 	
 	

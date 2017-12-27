@@ -101,16 +101,15 @@ public class USLBackupTransferManager {
 				throw new RuntimeException("client.storeFile returned false!");
 			}
 		}catch(IOException e) {
-			logger.throwing(e);
-			throw new RuntimeException(e);
+			logger.error("Failed to backup database!");
+			logger.catching(e);
 		}finally {
 			try {
 				logger.trace("Attempting to disconnect from ftp server..");
 				client.disconnect();
 			} catch (IOException e) {
 				logger.trace("Failed to disconnect from ftp server");
-				logger.throwing(e);
-				throw new RuntimeException(e);
+				logger.catching(e);
 			}
 		}
 	}
