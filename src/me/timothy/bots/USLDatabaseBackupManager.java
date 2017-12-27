@@ -8,6 +8,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.sql.SQLException;
+import java.text.DateFormat;
+import java.util.Date;
 import java.util.Vector;
 
 import org.apache.logging.log4j.LogManager;
@@ -16,13 +18,12 @@ import org.apache.logging.log4j.Logger;
 import com.jcraft.jsch.Channel;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.ChannelSftp.LsEntry;
-
-import me.timothy.bots.database.ActionLogMapping;
-
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.SftpException;
+
+import me.timothy.bots.database.ActionLogMapping;
 
 /**
  * Manages disconnecting the database and managing backups. This handles
@@ -86,13 +87,22 @@ public class USLDatabaseBackupManager {
 		generateDatabaseBackupFile(backupFile);
 		
 		logger.debug("Sending database backup file..");
-		sendDatabaseBackupFile(backupFile, now);
+		boolean succ = sendDatabaseBackupFile(backupFile, now);
+		if(!succ) {
+			logger.error("Sending database backup file was unsuccessful!");
+			al.append("Failed to send the database backup file to the backup server! It may be offline.");
+		}
+		
 		
 		logger.debug("Deleting local backup..");
 		deleteLocalDatabaseBackupFile(backupFile);
 		
 		logger.debug("Choosing new backup time..");
-		selectNextBackupTime(now);
+		selectNextBackupTime(now, succ);
+		logger.debug("Next backup time is " + nextBackupUTC);
+		Date asDate = new Date(nextBackupUTC);
+		DateFormat df = DateFormat.getDateTimeInstance();
+		al.append("Next backup attempt is at " + df.format(asDate));
 		
 		logger.debug("Reconnecting to MySQL database..");
 		try {
@@ -207,13 +217,14 @@ public class USLDatabaseBackupManager {
 	 * @param backupFile the backup file to send
 	 * @param now the current timestamp
 	 */
-	protected void sendDatabaseBackupFile(File backupFile, long now) {
+	protected boolean sendDatabaseBackupFile(File backupFile, long now) {
 		final boolean secure = Boolean.valueOf(config.getProperty("ftpbackups.secure"));
 		
 		if(secure) {
 			sendDatabaseBackupFileSFTP(backupFile, now);
+			return true; // todo
 		}else {
-			sendDatabaseBackupFileFTP(backupFile, now);
+			return sendDatabaseBackupFileFTP(backupFile, now);
 		}
 	}
 	
@@ -222,11 +233,12 @@ public class USLDatabaseBackupManager {
 	 * 
 	 * @param backupFile the backup file
 	 * @param now the current timestamp
+	 * @return if the backup file was sent successfully
 	 */
-	protected void sendDatabaseBackupFileFTP(File backupFile, long now) {
+	protected boolean sendDatabaseBackupFileFTP(File backupFile, long now) {
 		final String dbFolder = config.getProperty("ftpbackups.dbfolder");
 		
-		USLBackupTransferManager.backupFileFTP(config, backupFile, 
+		return USLBackupTransferManager.backupFileFTP(config, backupFile, 
 				USLBackupTransferManager.navigateToDirectory(dbFolder), 
 				USLBackupTransferManager.chooseUnusedFilenameUsingCounter("usl-db-backup-" + now, "sql.gz")
 				);
@@ -347,7 +359,11 @@ public class USLDatabaseBackupManager {
 	 * Selects the next backup time
 	 * @param now the current timestamp
 	 */
-	protected void selectNextBackupTime(long now) {
-		nextBackupUTC = now + Long.parseLong(config.getProperty("ftpbackups.intervalms"));
+	protected void selectNextBackupTime(long now, boolean succ) {
+		if(succ) {
+			nextBackupUTC = now + Long.parseLong(config.getProperty("ftpbackups.intervalms"));
+		}else {
+			nextBackupUTC = now + Long.parseLong(config.getProperty("ftpbackups.failintervalms"));
+		}
 	}
 }

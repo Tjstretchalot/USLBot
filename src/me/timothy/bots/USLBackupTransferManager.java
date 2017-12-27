@@ -42,8 +42,9 @@ public class USLBackupTransferManager {
 	 * @param backupFile the file to backup
 	 * @param remoteWorkingDirEffector sets the remote working directory
 	 * @param remoteFilenameSelector sets the remote filename
+	 * @return if the backup was successful
 	 */
-	public static void backupFileFTP(USLFileConfiguration config, File backupFile, Consumer<FTPClient> remoteWorkingDirEffector, 
+	public static boolean backupFileFTP(USLFileConfiguration config, File backupFile, Consumer<FTPClient> remoteWorkingDirEffector, 
 			Function<FTPClient, String> remoteFilenameSelector) {
 		if(Boolean.parseBoolean(config.getProperty("ftpbackups.secure"))) {
 			throw new RuntimeException("backupFileFTP cannot be used with secure backups!");
@@ -103,6 +104,7 @@ public class USLBackupTransferManager {
 		}catch(IOException e) {
 			logger.error("Failed to backup database!");
 			logger.catching(e);
+			return false;
 		}finally {
 			try {
 				logger.trace("Attempting to disconnect from ftp server..");
@@ -112,6 +114,7 @@ public class USLBackupTransferManager {
 				logger.catching(e);
 			}
 		}
+		return true;
 	}
 	
 	/**
