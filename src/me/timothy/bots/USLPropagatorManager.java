@@ -140,7 +140,7 @@ public class USLPropagatorManager {
 			int initialHmaCounter = hmaCounter[0];
 			
 			for(HandledModAction hma : hmas) {
-				handleHandledModAction(hma, major, minor, hats, hmaCounter, actionCounter, majorMinorStatus);
+				handleHandledModAction(hma, major, minor, hats, actionCounter, hmaCounter, majorMinorStatus);
 				
 				if(hmaCounter[0] >= MAX_HMAS)
 					break;
