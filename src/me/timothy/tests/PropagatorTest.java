@@ -15,6 +15,7 @@ import me.timothy.bots.USLBotDriver;
 import me.timothy.bots.USLDatabase;
 import me.timothy.bots.USLFileConfiguration;
 import me.timothy.bots.memory.PropagateResult;
+import me.timothy.bots.memory.UserBanInformation;
 import me.timothy.bots.memory.UserPMInformation;
 import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.HandledModAction;
@@ -1021,6 +1022,56 @@ public class PropagatorTest {
 		assertTrue(result.modmailPMs.isEmpty());
 		assertTrue(result.userPMs.isEmpty());
 		assertTrue(result.postpone);
+	}
+	
+	@Test
+	public void testWriteOnlyReadOnlyPreviousBan() {
+		initResponses();
+		long now = System.currentTimeMillis();
+		long fiveMinutesFromNow = now + 1000 * 60 * 5;
+		
+		Person babyMonkeyOnPig = database.getPersonMapping().fetchOrCreateByUsername("BabyMonkeyOnPig");
+		Person c4cBanBot = database.getPersonMapping().fetchOrCreateByUsername("C4Cbanbot");
+		Person timCookz = database.getPersonMapping().fetchOrCreateByUsername("TimCookz");
+		
+		MonitoredSubreddit appleswap = new MonitoredSubreddit(-1, "appleswap", true, false, false);
+		database.getMonitoredSubredditMapping().save(appleswap);
+		
+		SubscribedHashtag appleswapScammer = new SubscribedHashtag(-1, appleswap.id, "#scammer", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(appleswapScammer);
+		
+		MonitoredSubreddit cash4Cash = new MonitoredSubreddit(-1, "Cash4Cash", true, true, true);
+		database.getMonitoredSubredditMapping().save(cash4Cash);
+
+		SubscribedHashtag cash4CashScammer = new SubscribedHashtag(-1, cash4Cash.id, "#scammer", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(cash4CashScammer);
+		
+		MonitoredSubreddit borrow = new MonitoredSubreddit(-1, "borrow", true, false, false);
+		database.getMonitoredSubredditMapping().save(borrow);
+
+		SubscribedHashtag borrowScammer = new SubscribedHashtag(-1, borrow.id, "#scammer", new Timestamp(now), null);
+		database.getSubscribedHashtagMapping().save(borrowScammer);
+		
+		
+		HandledModAction babyMonkeyBansCookzHMA = new HandledModAction(-1, appleswap.id, "babyMonkeyBansCookz", new Timestamp(now));
+		database.getHandledModActionMapping().save(babyMonkeyBansCookzHMA);
+		
+		HandledModAction c4cBanBotBansCookzHMA = new HandledModAction(-1, cash4Cash.id, "c4cBanBotBansCookz", new Timestamp(fiveMinutesFromNow));
+		database.getHandledModActionMapping().save(c4cBanBotBansCookzHMA);
+		
+		BanHistory babyMonkeyBansCookz = new BanHistory(-1, babyMonkeyOnPig.id, timCookz.id, babyMonkeyBansCookzHMA.id, "#scammer never sent items", "permanent");
+		database.getBanHistoryMapping().save(babyMonkeyBansCookz);
+		
+		BanHistory c4cBanBotBansCookz = new BanHistory(-1, c4cBanBot.id, timCookz.id, c4cBanBotBansCookzHMA.id, "scammer never sent items", "permanent");
+		database.getBanHistoryMapping().save(c4cBanBotBansCookz);
+		
+		PropagateResult result = propagator.propagateBan(borrow, babyMonkeyBansCookzHMA, babyMonkeyBansCookz);
+		assertNotNull(result.bans);
+		assertEquals(1, result.bans.size());
+		
+		UserBanInformation info = result.bans.get(0);
+		assertEquals(timCookz.id, info.person.id);
+		assertEquals(borrow.id, info.subreddit.id);
 	}
 	
 	@After 

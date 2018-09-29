@@ -1,8 +1,10 @@
 package me.timothy.tests.database;
 
-import static org.junit.Assert.*;
-
-import java.sql.Timestamp;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -122,6 +124,7 @@ public class SubredditModqueueProgressMappingTest {
 		assertEquals(subBProgr, fromDB);
 	}
 	
+	/*
 	@Test
 	public void testAnySearchingForward() {
 		MonitoredSubreddit subA = new MonitoredSubreddit(-1, "johnssub", false, false, false);
@@ -155,7 +158,9 @@ public class SubredditModqueueProgressMappingTest {
 		database.getSubredditModqueueProgressMapping().save(subBProg);
 		assertTrue(database.getSubredditModqueueProgressMapping().anySearchingForward());
 	}
+	*/
 	
+	/*
 	@Test
 	public void testAnyNullTime() {
 		MonitoredSubreddit subA = new MonitoredSubreddit(-1, "johnssub", false, false, false);
@@ -190,7 +195,9 @@ public class SubredditModqueueProgressMappingTest {
 		database.getSubredditModqueueProgressMapping().save(subBProg);
 		assertTrue(database.getSubredditModqueueProgressMapping().anyNullLastFullHistoryTime());
 	}
+	*/
 	
+	/*
 	@Test
 	public void testFetchLeastRecentHadFullHistory() {
 		MonitoredSubreddit subA = new MonitoredSubreddit(-1, "johnssub", false, false, false);
@@ -222,4 +229,5 @@ public class SubredditModqueueProgressMappingTest {
 
 		assertEquals(now, database.getSubredditModqueueProgressMapping().fetchLeastRecentFullHistoryTime().getTime());
 	}
+	*/
 }

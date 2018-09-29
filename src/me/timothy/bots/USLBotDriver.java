@@ -18,22 +18,15 @@ import me.timothy.bots.memory.UnbanRequestResult;
 import me.timothy.bots.memory.UserBanInformation;
 import me.timothy.bots.memory.UserPMInformation;
 import me.timothy.bots.memory.UserUnbanInformation;
-import me.timothy.bots.models.BanHistory;
-import me.timothy.bots.models.HandledModAction;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
 import me.timothy.bots.models.SubredditModqueueProgress;
 import me.timothy.bots.models.SubredditTraditionalListStatus;
 import me.timothy.bots.models.TraditionalScammer;
-import me.timothy.bots.models.UnbanHistory;
 import me.timothy.bots.models.UnbanRequest;
 import me.timothy.bots.summon.CommentSummon;
 import me.timothy.bots.summon.LinkSummon;
 import me.timothy.bots.summon.PMSummon;
-import me.timothy.jreddit.RedditUtils;
-import me.timothy.jreddit.info.Listing;
-import me.timothy.jreddit.info.ModAction;
-import me.timothy.jreddit.info.Thing;
 
 /**
  * The bot driver for the universal scammer list bot. Contains
@@ -43,6 +36,12 @@ import me.timothy.jreddit.info.Thing;
  * @author Timothy Moore
  */
 public class USLBotDriver extends BotDriver {
+	/**
+	 * It's quite painful to pass this around. This simply calls
+	 * maybeLoginAgain on the singleton of USLBotDriver
+	 */
+	public static Runnable sMaybeLoginAgainRunnable;
+	
 	protected List<MonitoredSubreddit> monitoredSubreddits;
 	protected USLDatabaseBackupManager backupManager;
 	protected USLPropagator propagator;
@@ -66,6 +65,9 @@ public class USLBotDriver extends BotDriver {
 	public USLBotDriver(USLDatabase database, USLFileConfiguration config, Bot bot, CommentSummon[] commentSummons,
 			PMSummon[] pmSummons, LinkSummon[] submissionSummons) {
 		super(database, config, bot, commentSummons, pmSummons, submissionSummons);
+		
+		sMaybeLoginAgainRunnable = maybeLoginAgainRunnable;
+		
 		backupManager = new USLDatabaseBackupManager(database, config);
 		propagator = new USLPropagator(database, config);
 		propagatorManager = new USLPropagatorManager(database, config, propagator, (result) -> handlePropagateResult(result));
@@ -153,6 +155,12 @@ public class USLBotDriver extends BotDriver {
 		USLDatabase db = (USLDatabase) database;
 		
 		monitoredSubreddits = db.getMonitoredSubredditMapping().fetchAll();
+		for(int i = monitoredSubreddits.size() - 1; i >= 0; i--) {
+			MonitoredSubreddit ms = monitoredSubreddits.get(i);
+			if(ms.readOnly && ms.writeOnly) {
+				monitoredSubreddits.remove(i);
+			}
+		}
 		bot.setSubreddit(String.join("+", monitoredSubreddits.stream().map(ms -> ms.subreddit).collect(Collectors.toList())));
 	}
 
@@ -312,6 +320,7 @@ public class USLBotDriver extends BotDriver {
 	 */
 	protected void scanSubForBans(MonitoredSubreddit sub) {
 		USLDatabase db = (USLDatabase) database;
+		USLFileConfiguration cfg = (USLFileConfiguration) config;
 		
 		SubredditModqueueProgress progress = db.getSubredditModqueueProgressMapping().fetchForSubreddit(sub.id);
 		
@@ -321,295 +330,21 @@ public class USLBotDriver extends BotDriver {
 			db.getSubredditModqueueProgressMapping().save(progress);
 		}
 		
-		// no more than 3 pages at a time
-		for(int page = 0; page < 3; page++) {
-			if(progress.searchForward) {
-				scanSubForBansForwardSearch(sub, progress);
-			}else {
-				long now = System.currentTimeMillis();
-				boolean finished = scanSubForBansReverseSearch(sub, progress);
-				
-				if(finished) {
-					progress.lastTimeHadFullHistory = new Timestamp(now);
-					db.getSubredditModqueueProgressMapping().save(progress);
-					return;
-				}
+		if(progress.searchForward) {
+			boolean result = USLForwardSubScanner.scan(bot, db, cfg, sub);
+			if(result == USLForwardSubScanner.FINISHED) {
+				progress.searchForward = false;
+				db.getSubredditModqueueProgressMapping().save(progress);
 			}
-		}
-		
-		progress.lastTimeHadFullHistory = null;
-		db.getSubredditModqueueProgressMapping().save(progress);
-	}
-	
-	/**
-	 * Scans one page of a subreddits modactions using a forward search technique.
-	 * 
-	 * @param sub the subreddit to search
-	 * @param progress current progress information
-	 */
-	protected void scanSubForBansForwardSearch(MonitoredSubreddit sub, SubredditModqueueProgress progress) {
-		USLDatabase db = (USLDatabase) database;
-		HandledModAction latestHandledModAction = null;
-		if(progress.latestHandledModActionID != null) {
-			latestHandledModAction = db.getHandledModActionMapping().fetchByID(progress.latestHandledModActionID);
-		}
-		
-		String after = latestHandledModAction != null ? latestHandledModAction.modActionID : null;
-		logger.trace("Fetching moderator log for /r/" + sub.subreddit + ", before=null, after=" + after);
-		Listing bans = getSubActions(sub, null, after);
-		logger.trace("Got " + bans.numChildren() + " results");
-		sleepFor(2000);
-		
-		HandledModAction afterAction = null;
-		HandledModAction earliestInTimeAction = null;
-		HandledModAction latestInTimeAction = null;
-		for(int i = 0; i < bans.numChildren(); i++) {
-			Thing child = bans.getChild(i);
-			if(!(child instanceof ModAction)) {
-				logger.warn("Got weird child from getSubBans: type=" + child.getClass().getCanonicalName());
-				continue;
-			}
-			
-			ModAction action = (ModAction) child;
-			String prefix = "Child " + i + " [id=" + action.id() + "] ";
-			HandledModAction handled = db.getHandledModActionMapping().fetchByModActionID(action.id());
-			if(handled != null) {
-				logger.trace(prefix + " we had already seen");
-				continue;
-			}else {
-				handled = new HandledModAction(-1, sub.id, action.id(), new Timestamp((long)(action.createdUTC() * 1000)));
-			
-				db.getHandledModActionMapping().save(handled);
-	
-				if(action.action().equalsIgnoreCase("banuser")) {
-					logger.trace(prefix + " was a new ban, saving it then will dump it");
-					BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action, handled);
-					logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
-				}else if(action.action().equalsIgnoreCase("unbanuser")) {
-					logger.trace(prefix + " was a new unban, saving it then will dump it");
-					UnbanHistory unbanHistory = createAndSaveUnbanHistoryFromAction(db, sub, action, handled);
-					logger.printf(Level.INFO, "Detected new unban: %s", unbanHistory.toString());
-				}else {
-					logger.trace(prefix + " was a " + action.action() + "; ignoring it");
-				}
-			}
-
-			if(bans.after() != null && action.id().equalsIgnoreCase(bans.after())) {
-				afterAction = handled;
-			}
-			
-			if(earliestInTimeAction == null || handled.occurredAt.before(earliestInTimeAction.occurredAt)) {
-				earliestInTimeAction = handled;
-			}
-			
-			if(latestInTimeAction == null || handled.occurredAt.after(latestInTimeAction.occurredAt)) {
-				latestInTimeAction = handled;
-			}
-		}
-		
-		if(progress.newestHandledModActionID == null) {
-			if(latestInTimeAction == null) {
-				logger.error("Either there are 0 bans in " + sub.subreddit + " or something has gone horribly wrong. Pming usl");
-				sendModmail("universalscammerlist", "USLBot Unrecoverable Errors", "When monitoring /r/" + sub.subreddit + " I "
-						+ "found no bans. I think it's more likely something went wrong.\n"
-						+ "\n"
-						+ "---\n"
-						+ "\n"
-						+ "Here is a dump of the Listing result that was returned:\n"
-						+ "\n"
-						+ bans.toString());
-				logger.error("Initiating shutdown..");
-				System.exit(1);
-			}else {
-				progress.newestHandledModActionID = latestInTimeAction.id;
-			}
-		}
-		
-		if(bans.after() != null) {
-			if(afterAction != earliestInTimeAction) { 
-				logger.warn("Listing after() is not equal to the ban in the listing with the least recent timestamp!");
-				logger.warn(bans.toString());
-			}
-			
-			if(afterAction == null) {
-				logger.warn("Listing after() references an id that isn't in the listing!");
-				logger.warn(bans.toString());
-				
-				if(earliestInTimeAction != null) {
-					progress.latestHandledModActionID = earliestInTimeAction.id; 
-				}else {
-					logger.error("Could not fallback to latest ban by timestamp; that was null too!");
-					logger.error("This position is unrecoverable and will have the subreddit looping. Sending modmail to USL");
-					sendModmail("universalscammerlist", "USLBot Unrecoverable Errors", "When monitoring /r/" + sub.subreddit + " I "
-							+ "recieved a listing of BanActions. That listing was *completely empty*, but it returned after() not null! "
-							+ "Most likely I have incorrect assumptions about how the reddit api handles pagination. "
-							+ "So I will shut down until someone can check me out.\n"
-							+ "\n"
-							+ "---\n"
-							+ "\n"
-							+ "I was using after=" + (earliestInTimeAction != null ? earliestInTimeAction.modActionID : null));
-					logger.error("Initiating shutdown..");
-					System.exit(1);
-				}
-			}else {
-				progress.latestHandledModActionID = afterAction.id;
-			}
-			
-			db.getSubredditModqueueProgressMapping().save(progress);
 		}else {
-			logger.info("Reached end of /r/" + sub.subreddit + " modqueue actions.");
-			
-			if(earliestInTimeAction != null) {
-				progress.latestHandledModActionID = earliestInTimeAction.id;
+			boolean result = USLReverseSubScanner.scan(bot, db, cfg, sub);
+			if(result == USLReverseSubScanner.FINISHED) {
+				progress.lastTimeHadFullHistory = new Timestamp(System.currentTimeMillis());
 			}else {
-				logger.warn("The last page was empty for " + sub.subreddit + ". There is a chance this means that reddits pagination failed!");
+				progress.lastTimeHadFullHistory = null;
 			}
-			
-			progress.searchForward = false;
 			db.getSubredditModqueueProgressMapping().save(progress);
 		}
-	}
-
-	/**
-	 * Scans one page of a subreddits modactions using a reverse search technique. Returns true if
-	 * the search finished (so there are no more pages to search)
-	 * 
-	 * @param sub subreddit to search
-	 * @param progress progress information
-	 * @return if there is no more new information on sub to find right now
-	 */
-	protected boolean scanSubForBansReverseSearch(MonitoredSubreddit sub, SubredditModqueueProgress progress) {
-		USLDatabase db = (USLDatabase) database;
-		
-		if(progress.newestHandledModActionID == null) {
-			logger.error("scanSubForBansReverseSearch and progress.newestBanHistory id == null. This is not going to work.");
-			logger.error("Initiating shutdown..");
-			System.exit(1);
-		}
-		
-		HandledModAction newestModAction = db.getHandledModActionMapping().fetchByID(progress.newestHandledModActionID);
-		
-		logger.trace("Fetching subreddit " + sub.subreddit + "s modqueue, before=" + newestModAction.modActionID + ", after=null");
-		Listing beforeNewest = getSubActions(sub, newestModAction.modActionID, null);
-		logger.trace("Got beforeNewest = " + beforeNewest);
-		sleepFor(2000);
-		
-		HandledModAction mostRecentHandled = null;
-		HandledModAction beforeHandled = null;
-		for(int i = 0; i < beforeNewest.numChildren(); i++) {
-			Thing thing = beforeNewest.getChild(i);
-			if(!(thing instanceof ModAction)) {
-				logger.warn("scanSubForBansReverseSearch got weird thing type=" + thing.getClass().getCanonicalName());
-				continue;
-			}
-			
-			ModAction action = (ModAction) thing;
-			boolean alreadySaw = false;
-			HandledModAction handled = db.getHandledModActionMapping().fetchByModActionID(action.id());
-			
-			String prefix = "Child " + i  + " [id=" + action.id() + "]";
-			if (handled != null) {
-				logger.trace(prefix + " we had already seen");
-				alreadySaw = true;
-			}
-			
-			if(!alreadySaw) {
-				handled = new HandledModAction(-1, sub.id, action.id(), new Timestamp((long)(action.createdUTC() * 1000)));
-				db.getHandledModActionMapping().save(handled);
-				
-				
-				if(action.action().equalsIgnoreCase("banuser")) {
-					logger.trace(prefix + " was a ban, saving then dumping");
-					BanHistory banHistory = createAndSaveBanHistoryFromAction(db, sub, action, handled);
-					logger.printf(Level.INFO, "Detected new ban: %s", banHistory.toString());
-				}else if(action.action().equalsIgnoreCase("unbanuser")) {
-					logger.trace(prefix + " was an unban, saving then dumping");
-					UnbanHistory unbanHistory = createAndSaveUnbanHistoryFromAction(db, sub, action, handled);
-					logger.printf(Level.INFO, "Detected new unban: %s", unbanHistory.toString());
-				}else {
-					logger.trace(prefix + " was a " + action.action() + "; ignoring");
-				}
-			}
-			
-			if(beforeNewest.before() != null && action.id().equalsIgnoreCase(beforeNewest.before())) {
-				beforeHandled = handled;
-			}
-			
-			if(mostRecentHandled == null || handled.occurredAt.after(mostRecentHandled.occurredAt)) {
-				mostRecentHandled = handled;
-			}
-		}
-		
-		if(beforeNewest.before() != null) {
-			if(beforeHandled == null) {
-				logger.error("beforeNewest.before() was not null and in the listing! I don't know how to recover!");
-				logger.error("Shutting down..");
-				System.exit(1);
-			}
-			
-			if(beforeHandled != mostRecentHandled) {
-				logger.warn("beforeNewest.before() is not the most recent ban in the listing. this should be recoverable but it's weird");
-			}
-			
-			logger.trace("Using reddits suggested before target of " + beforeNewest.before() + " which we found");
-			progress.newestHandledModActionID = beforeHandled.id;
-			db.getSubredditModqueueProgressMapping().save(progress);
-			return false;
-		}else {
-			if(mostRecentHandled == null) {
-				logger.trace("beforeNewest.before() is null and mostRecentHandled is null, this means that we got no children.");
-				return true; // got an empty listing. no new bans since last check
-			}
-			
-			logger.trace("Reddit gave us before=null, so using the one with the most recent timestamp " + timeToPretty(mostRecentHandled.occurredAt.getTime()) + " (id=" + mostRecentHandled.modActionID +")");
-			progress.newestHandledModActionID = mostRecentHandled.id;
-			db.getSubredditModqueueProgressMapping().save(progress);
-			return true;
-		}
-	}
-	
-	/**
-	 * Create a ban history from the specified mod action, save it to the database, and return it.
-	 * 
-	 * @param db database casted
-	 * @param sub the subreddit it was fetched from
-	 * @param action the action to save
-	 * @param handled the handled mod action corresponding with action
-	 * @return the ban history
-	 */
-	protected BanHistory createAndSaveBanHistoryFromAction(USLDatabase db, MonitoredSubreddit sub, ModAction action, HandledModAction handled) {
-		Person mod = db.getPersonMapping().fetchOrCreateByUsername(action.mod());
-		Person banned = db.getPersonMapping().fetchOrCreateByUsername(action.targetAuthor());
-		
-		BanHistory previousBanOnPerson = db.getBanHistoryMapping().fetchBanHistoryByPersonAndSubreddit(banned.id, sub.id);
-		if(previousBanOnPerson != null) {
-			logger.info("Had information on a ban for user " + banned.username + " on subreddit " + sub.subreddit + ", but a "
-					+ "newer ban has occurred on that same person on that same subreddit. That could mean that the old "
-					+ "ban was temporary (old details='" + previousBanOnPerson.banDetails + "') or the person was "
-							+ "unbanned and rebanned on the subreddit.");
-		}
-		
-		BanHistory banHistory = new BanHistory(-1, mod.id, banned.id, handled.id, action.description(), action.details());
-		db.getBanHistoryMapping().save(banHistory);
-		return banHistory;
-	}
-	
-	/**
-	 * Create an unban history from the specified mod action, save it to the database, and return it
-	 * 
-	 * @param db the database
-	 * @param sub the monitored subreddit the action is on
-	 * @param action the action
-	 * @param handled the handled mod action corresponding with action
-	 * @return the unban history
-	 */
-	protected UnbanHistory createAndSaveUnbanHistoryFromAction(USLDatabase db, MonitoredSubreddit sub, ModAction action, HandledModAction handled) {
-		Person mod = db.getPersonMapping().fetchOrCreateByUsername(action.mod());
-		Person unbanned = db.getPersonMapping().fetchOrCreateByUsername(action.targetAuthor());
-		
-		UnbanHistory unbanHistory = new UnbanHistory(-1, mod.id, unbanned.id, handled.id);
-		db.getUnbanHistoryMapping().save(unbanHistory);
-		return unbanHistory;
 	}
 	
 	/**
@@ -745,25 +480,6 @@ public class USLBotDriver extends BotDriver {
 	 */
 	protected void sendModmail(String sub, String title, String body) {
 		sendMessage("/r/" + sub, title, body);
-	}
-	
-	/**
-	 * Wrapper around {@link me.timothy.jreddit.RedditUtils#getModeratorLog(String, String, String, String, me.timothy.jreddit.User)}
-	 * Awaiting changes to https://www.reddit.com/r/redditdev/comments/78gj7b/api_can_the_rsubaboutlogjson_endpoint_allow/ this
-	 * returns all modactions for the subreddit so that you can parse both banuser and unbanuser actions.
-	 * 
-	 * @param sub monitored subreddit
-	 * @param before before (wont return this id)
-	 * @param after after (wont return this id)
-	 * @return the listing
-	 */
-	protected Listing getSubActions(MonitoredSubreddit sub, String before, String after) {
-		return new Retryable<Listing>("get subreddit moderator log", maybeLoginAgainRunnable) {
-			@Override
-			protected Listing runImpl() throws Exception {
-				return RedditUtils.getModeratorLog(sub.subreddit, null, null, before, after, bot.getUser());
-			}
-		}.run();
 	}
 	
 	/**

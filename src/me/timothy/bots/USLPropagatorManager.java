@@ -90,13 +90,16 @@ public class USLPropagatorManager {
 	public void managePropagating(List<MonitoredSubreddit> tracked) {
 		ActionLogMapping al = database.getActionLogMapping();
 		for(int i = 0; i < tracked.size(); i++) {
-			MonitoredSubreddit major = tracked.get(i);
-			al.append(String.format("Propagating mod actions to {link subreddit %d}..", major.id));
+			MonitoredSubreddit toSubreddit = tracked.get(i);
+			al.append(String.format("Propagating mod actions to {link subreddit %d}..", toSubreddit.id));
 			for(int j = 0; j < tracked.size(); j++) {
-				MonitoredSubreddit minor = tracked.get(j);
-				logger.trace("Managing propagating from " + minor.subreddit + " to " + major.subreddit);
-				managePropagatingSubPair(major, minor);
-				logger.trace("Finished propagating from " + minor.subreddit + " to " + major.subreddit);
+				if(i == j)
+					continue;
+				
+				MonitoredSubreddit fromSubreddit = tracked.get(j);
+				//logger.trace("Managing propagating from " + minor.subreddit + " to " + major.subreddit);
+				managePropagatingSubPair(toSubreddit, fromSubreddit);
+				//logger.trace("Finished propagating from " + minor.subreddit + " to " + major.subreddit);
 			}
 		}
 	}
@@ -105,54 +108,75 @@ public class USLPropagatorManager {
 	 * Spends a reasonable amount of time propagating actions from minor to major
 	 * if it is possible and reasonable to do so
 	 * 
-	 * @param major the major subreddit
-	 * @param minor the minor subreddit
+	 * @param toSub the major subreddit
+	 * @param fromSub the minor subreddit
 	 */
-	protected void managePropagatingSubPair(MonitoredSubreddit major, MonitoredSubreddit minor) {
-		SubredditModqueueProgress minorProgress = database.getSubredditModqueueProgressMapping().fetchForSubreddit(minor.id);
-		if(minorProgress.lastTimeHadFullHistory == null) {
-			logger.trace(minor.subreddit + " is still having its history fetched. Not propagating.");
+	protected void managePropagatingSubPair(MonitoredSubreddit toSub, MonitoredSubreddit fromSub) {
+		SubredditModqueueProgress fromProgres = database.getSubredditModqueueProgressMapping().fetchForSubreddit(fromSub.id);
+		if(fromProgres.lastTimeHadFullHistory == null) {
+			database.getActionLogMapping().append(fromSub.subreddit + " is still having its history fetched. Not propagating.");
+			logger.trace(fromSub.subreddit + " is still having its history fetched. Not propagating.");
 			return;
 		}
 		
 		
-		SubredditPropagateStatus majorMinorStatus = database.getSubredditPropagateStatusMapping()
-				.fetchForSubredditPair(major.id, minor.id);
-		if(majorMinorStatus == null) {
-			majorMinorStatus = initMajorMinorStatus(major, minor);
+		SubredditPropagateStatus propStatus = database.getSubredditPropagateStatusMapping()
+				.fetchForSubredditPair(toSub.id, fromSub.id);
+		if(propStatus == null) {
+			propStatus = initMajorMinorStatus(toSub, fromSub);
 		}
+		
+		logger.printf(Level.TRACE, "Propagating actions that occurred AFTER %s on %s to %s", 
+				propStatus.latestPropagatedActionTime.toString(), fromSub.toString(), toSub.toString());
 		
 		int[] hmaCounter = new int[] { 0 };
 		// We use an array here to get the equivalent of C-like & 
 		int[] actionCounter = new int[] { 0 } ;
 		
 		final int MAX_HMAS = 250;
+		int hmasPerFetch = 50;
 		final int MAX_ACTIONS = 3;
+		
 		while(hmaCounter[0] < MAX_HMAS && actionCounter[0] < MAX_ACTIONS) {
-			List<HandledAtTimestamp> hats = fetchHandledAtTimestamp(major, minor);
-			List<HandledModAction> hmas = fetchHandledModActions(major, minor, minorProgress, majorMinorStatus);
+			List<HandledAtTimestamp> hats = fetchHandledAtTimestamp(toSub, fromSub);
+			List<HandledModAction> hmas = fetchHandledModActions(toSub, fromSub, propStatus.latestPropagatedActionTime, hmasPerFetch);
 			
 			if(hmas.isEmpty()) {
-				logger.trace("Nothing more from " + minor.subreddit + " to propagate to " + major.subreddit);
+				//logger.trace("Nothing more from " + minor.subreddit + " to propagate to " + major.subreddit);
 				return;
 			}
-
-			int initialHmaCounter = hmaCounter[0];
+			
+			boolean foundNonHat = false;
 			
 			for(HandledModAction hma : hmas) {
-				handleHandledModAction(hma, major, minor, hats, actionCounter, hmaCounter, majorMinorStatus);
-				
 				if(hmaCounter[0] >= MAX_HMAS)
 					break;
 				if(actionCounter[0] >= MAX_ACTIONS)
 					break;
+				if(hats.stream().anyMatch((hat) -> hat.handledModActionID == hma.id))
+					continue;
+				
+				foundNonHat = true;
+				
+				
+				handleHandledModAction(hma, toSub, fromSub, hats, actionCounter, hmaCounter, propStatus);
 			}
-
-			if(initialHmaCounter == hmaCounter[0])
+			
+			if(hmaCounter[0] >= MAX_HMAS)
 				break;
+			if(actionCounter[0] >= MAX_ACTIONS)
+				break;
+			
+			if(!foundNonHat) {
+				if(hmas.size() < hmasPerFetch)
+					break; // didn't get as many as we asked and found nothing new -> done
+				
+				logger.printf(Level.WARN, "Had to increase hmas per fetch because we didnt get any new things (from %d to %d)", hmasPerFetch, hmasPerFetch + 50);
+				hmasPerFetch += 50; // we need to view more to get the full picture
+			}
 		}
 		
-		logger.printf(Level.TRACE, "Propagated %d hmas which required %d actions (config: %d max hmas, %d max actions)", hmaCounter[0], actionCounter[0], MAX_HMAS, MAX_ACTIONS);
+		//logger.printf(Level.TRACE, "Propagated %d hmas which required %d actions (config: %d max hmas, %d max actions)", hmaCounter[0], actionCounter[0], MAX_HMAS, MAX_ACTIONS);
 	}
 	
 	
@@ -162,36 +186,43 @@ public class USLPropagatorManager {
 	 * the major/minor status (if appropriate).
 	 * 
 	 * @param hma the handled mod action
-	 * @param major the subreddit being propagated to
-	 * @param minor the subreddit being propagated from
+	 * @param toSub the subreddit being propagated to
+	 * @param fromSub the subreddit being propagated from
 	 * @param hats the list of HATs
 	 * @param actionCounter incremented at index 0 if a reddit action is required
 	 * @param majorMinorStatus the status of propagating minor to major
 	 */
-	protected void handleHandledModAction(HandledModAction hma, MonitoredSubreddit major, MonitoredSubreddit minor,
+	protected void handleHandledModAction(HandledModAction hma, MonitoredSubreddit toSub, MonitoredSubreddit fromSub,
 			List<HandledAtTimestamp> hats, int[] actionCounter, int[] hmaCounter, SubredditPropagateStatus majorMinorStatus) {
-		if(hats.stream().anyMatch((hat) -> hat.handledModActionID == hma.id))
-			return;
 		hmaCounter[0]++;
 		BanHistory bh = database.getBanHistoryMapping().fetchByHandledModActionID(hma.id);
 		if(bh != null) {
-			logger.trace("Propagating bh=" + bh);
-			PropagateResult result = propagator.propagateBan(major, hma, bh);
+			logger.printf(Level.TRACE, "Propagating bh id=%d, modPerson=%s, bannedPerson=%s, hma=[id = %d, mod action=%s @ %s] with desc=%s and details=%s from %s to %s",
+					bh.id, 
+					database.getPersonMapping().fetchByID(bh.modPersonID).username,
+					database.getPersonMapping().fetchByID(bh.bannedPersonID).username,
+					bh.handledModActionID,
+					database.getHandledModActionMapping().fetchByID(bh.handledModActionID).modActionID,
+					database.getHandledModActionMapping().fetchByID(bh.handledModActionID).occurredAt.toString(),
+					bh.banDescription,
+					bh.banDetails,
+					fromSub.subreddit, toSub.subreddit);
+			PropagateResult result = propagator.propagateBan(toSub, hma, bh);
 			if(resultHandler.handleResult(result)) {
 				actionCounter[0]++;
 			}
 		}else {
 			UnbanHistory ubh = database.getUnbanHistoryMapping().fetchByHandledModActionID(hma.id);
 			if(ubh != null) {
-				logger.trace("Propagating ubh=" + ubh);
-				PropagateResult result = propagator.propagateUnban(major, hma, ubh);
+				logger.printf(Level.TRACE, "Propagating ubh=%s from %s to %s", ubh.toString(), fromSub.subreddit, toSub.subreddit);
+				PropagateResult result = propagator.propagateUnban(toSub, hma, ubh);
 				if(resultHandler.handleResult(result)) {
 					actionCounter[0]++;
 				}
 			}
 		}
 		
-		handleHats(hma, major, minor, hats);
+		handleHats(hma, toSub, fromSub, hats);
 		
 		majorMinorStatus.latestPropagatedActionTime = new Timestamp(hma.occurredAt.getTime());
 		majorMinorStatus.updatedAt = new Timestamp(System.currentTimeMillis());
@@ -202,28 +233,28 @@ public class USLPropagatorManager {
 	 * Manage the list of handled at timestamps and update it for us handled
 	 * the specified hma
 	 * 
-	 * @param hma the hma we are handling
-	 * @param major major subreddit
-	 * @param minor minor subreddit
+	 * @param hmaWeJustHandled the hma we are handling
+	 * @param toSub major subreddit
+	 * @param fromSub minor subreddit
 	 * @param hats list of handled at timestamps
 	 */
-	protected void handleHats(HandledModAction hma, MonitoredSubreddit major, MonitoredSubreddit minor,
+	protected void handleHats(HandledModAction hmaWeJustHandled, MonitoredSubreddit toSub, MonitoredSubreddit fromSub,
 			List<HandledAtTimestamp> hats) {
 		boolean clearHats = true;
 		if(hats.size() > 0) {
 			HandledModAction hatHma = database.getHandledModActionMapping().fetchByID(hats.get(0).handledModActionID);
-			Timestamp timestamp = hatHma.occurredAt;
-			if(timestamp.getTime() == hma.occurredAt.getTime()) {
+			Timestamp timestampOfOldHats = hatHma.occurredAt;
+			if(timestampOfOldHats.getTime() == hmaWeJustHandled.occurredAt.getTime()) {
 				clearHats = false;
 			}
 		}
 		
 		if(clearHats) {
 			hats.clear();
-			database.getHandledAtTimestampMapping().deleteBySubIDs(major.id, minor.id);
+			database.getHandledAtTimestampMapping().deleteBySubIDs(toSub.id, fromSub.id);
 		}
 		
-		HandledAtTimestamp newHat = new HandledAtTimestamp(major.id, minor.id, hma.id);
+		HandledAtTimestamp newHat = new HandledAtTimestamp(toSub.id, fromSub.id, hmaWeJustHandled.id);
 		database.getHandledAtTimestampMapping().save(newHat);
 		hats.add(newHat);
 	}
@@ -232,26 +263,20 @@ public class USLPropagatorManager {
 	 * Fetch a reasonable number of handled mod actions that probably haven't been propagated
 	 * yet and aren't later than the latest full history
 	 * 
-	 * @param major subreddit propagating to
-	 * @param minor subreddit being propagating
-	 * @param minorProgress the progress of the history for the minor subreddit
-	 * @param majorMinorStatus the status of propagating minor to major
+	 * @param toSubreddit subreddit propagating to
+	 * @param fromSubreddit subreddit being propagating
+	 * @param fetchAfter the timestamp after which we should get
+	 * @param hmasPerFetch how many to fetch
 	 * @return a list of handled mod actions in chronological order
 	 */
-	protected List<HandledModAction> fetchHandledModActions(MonitoredSubreddit major, MonitoredSubreddit minor,
-			SubredditModqueueProgress minorProgress, SubredditPropagateStatus majorMinorStatus) {
-		Timestamp after;
-		if(majorMinorStatus.latestPropagatedActionTime == null) {
+	protected List<HandledModAction> fetchHandledModActions(MonitoredSubreddit toSubreddit, MonitoredSubreddit fromSubreddit,
+			Timestamp after, int hmasPerFetch) {
+		if(after == null) {
 			after = new Timestamp(1000 * 60 * 60 * 24 * 10); // 10 days after epoch
 			after.setNanos(0);
-		}else {
-			after = majorMinorStatus.latestPropagatedActionTime;
 		}
 		
-		Timestamp before = minorProgress.lastTimeHadFullHistory;
-		
-		
-		return database.getHandledModActionMapping().fetchLatestForSubreddit(minor.id, after, before, 50);
+		return database.getHandledModActionMapping().fetchLatestForSubreddit(fromSubreddit.id, after, null, hmasPerFetch);
 	}
 
 	/**

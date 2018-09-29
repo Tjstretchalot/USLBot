@@ -1,7 +1,5 @@
 package me.timothy.bots.database;
 
-import java.sql.Timestamp;
-
 import me.timothy.bots.models.SubredditModqueueProgress;
 
 /**
@@ -23,28 +21,4 @@ public interface SubredditModqueueProgressMapping extends ObjectMapping<Subreddi
 	 * @return the progress for that id.
 	 */
 	public SubredditModqueueProgress fetchForSubreddit(int monitoredSubredditID);
-
-	/**
-	 * Determine if there are any rows in the database that have searchForward
-	 * true
-	 * 
-	 * @return if any subreddits are searching forward to generate history
-	 */
-	public boolean anySearchingForward();
-	
-	/**
-	 * Determine if there are any rows in the database that have 
-	 * 
-	 * @return if there are any rows with lastTimeHadFullHistory null
-	 */
-	public boolean anyNullLastFullHistoryTime();
-	
-	/**
-	 * Find the row with the least recent lastTimeHadFullHistory and return
-	 * row.lastTimeHadFullHistory. Ignores null rows, but may return null if 
-	 * no rows have a lastTimeHadFullHistory set.
-	 * 
-	 * @return least recent lastTimeHadFullHistory
-	 */
-	public Timestamp fetchLeastRecentFullHistoryTime();
 }

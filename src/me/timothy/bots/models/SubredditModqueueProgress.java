@@ -17,10 +17,10 @@ public class SubredditModqueueProgress {
 	public int monitoredSubredditID;
 	/** True if latestBanHistoryID is not the latest one on reddit */
 	public boolean searchForward;
-	/** The latest mod action id (from our database) that has been retrieved from reddit */
-	public Integer latestHandledModActionID;
-	/** The newest mod action id (from our database) that has been retrieved from reddit */
-	public Integer newestHandledModActionID;
+	/** The latest mod action id that has been retrieved from reddit */
+	public String latestModActionID;
+	/** The newest mod action id that has been retrieved from reddit */
+	public String newestModActionID;
 	/** When this was last updated. */
 	public Timestamp updatedAt;
 	/** The last time when we had a complete history of this history, or null */
@@ -30,18 +30,18 @@ public class SubredditModqueueProgress {
 	 * @param id id (or -1 if not in database yet)
 	 * @param monitoredSubredditID the id of the monitoredsubreddit
 	 * @param searchForward if latestHandledModActionID is null or less than the latest one on reddit
-	 * @param latestHandledModActionID the latest/OLDEST HandledModAction id that was retrieved from this subreddit. may be null
-	 * @param newestHandledModActionID the newest/YOUNGEST HandledModAction id that was retrieved from this subreddit. may be null
+	 * @param latestModActionID the latest/OLDEST HandledModAction id that was retrieved from this subreddit. may be null
+	 * @param newestModActionID the newest/YOUNGEST HandledModAction id that was retrieved from this subreddit. may be null
 	 * @param updatedAt when this was last updated
 	 * @param lastTimeHadFullHistory the last time that we had a full history of this subreddit
 	 */
-	public SubredditModqueueProgress(int id, int monitoredSubredditID, boolean searchForward, Integer latestHandledModActionID,
-			Integer newestHandledModActionID, Timestamp updatedAt, Timestamp lastTimeHadFullHistory) {
+	public SubredditModqueueProgress(int id, int monitoredSubredditID, boolean searchForward, String latestModActionID,
+			String newestModActionID, Timestamp updatedAt, Timestamp lastTimeHadFullHistory) {
 		this.id = id;
 		this.monitoredSubredditID = monitoredSubredditID;
 		this.searchForward = searchForward;
-		this.latestHandledModActionID = latestHandledModActionID;
-		this.newestHandledModActionID = newestHandledModActionID;
+		this.latestModActionID = latestModActionID;
+		this.newestModActionID = newestModActionID;
 		this.updatedAt = updatedAt;
 		this.lastTimeHadFullHistory = lastTimeHadFullHistory;
 	}
@@ -52,9 +52,7 @@ public class SubredditModqueueProgress {
 	 * @return if this passes a sanity check
 	 */
 	public boolean isValid() {
-		return monitoredSubredditID > 0 && 
-				(latestHandledModActionID == null || latestHandledModActionID > 0) &&
-				(newestHandledModActionID == null || newestHandledModActionID > 0);
+		return monitoredSubredditID > 0;
 	}
 
 	@Override
@@ -62,9 +60,9 @@ public class SubredditModqueueProgress {
 		final int prime = 31;
 		int result = 1;
 		result = prime * result + id;
-		result = prime * result + ((latestHandledModActionID == null) ? 0 : latestHandledModActionID.hashCode());
+		result = prime * result + ((latestModActionID == null) ? 0 : latestModActionID.hashCode());
 		result = prime * result + monitoredSubredditID;
-		result = prime * result + ((newestHandledModActionID == null) ? 0 : newestHandledModActionID.hashCode());
+		result = prime * result + ((newestModActionID == null) ? 0 : newestModActionID.hashCode());
 		result = prime * result + (searchForward ? 1231 : 1237);
 		result = prime * result + ((updatedAt == null) ? 0 : updatedAt.hashCode());
 		result = prime * result + ((lastTimeHadFullHistory == null) ? 0 : lastTimeHadFullHistory.hashCode());
@@ -82,17 +80,17 @@ public class SubredditModqueueProgress {
 		SubredditModqueueProgress other = (SubredditModqueueProgress) obj;
 		if (id != other.id)
 			return false;
-		if (latestHandledModActionID == null) {
-			if (other.latestHandledModActionID != null)
+		if (latestModActionID == null) {
+			if (other.latestModActionID != null)
 				return false;
-		} else if (!latestHandledModActionID.equals(other.latestHandledModActionID))
+		} else if (!latestModActionID.equals(other.latestModActionID))
 			return false;
 		if (monitoredSubredditID != other.monitoredSubredditID)
 			return false;
-		if (newestHandledModActionID == null) {
-			if (other.newestHandledModActionID != null)
+		if (newestModActionID == null) {
+			if (other.newestModActionID != null)
 				return false;
-		} else if (!newestHandledModActionID.equals(other.newestHandledModActionID))
+		} else if (!newestModActionID.equals(other.newestModActionID))
 			return false;
 		if (searchForward != other.searchForward)
 			return false;
@@ -112,8 +110,8 @@ public class SubredditModqueueProgress {
 	@Override
 	public String toString() {
 		return "SubredditModqueueProgress [id=" + id + ", monitoredSubredditID=" + monitoredSubredditID
-				+ ", searchForward=" + searchForward + ", latestHandledModActionID=" + latestHandledModActionID
-				+ ", newestHandledModActionID=" + newestHandledModActionID + ", updatedAt=" + updatedAt + ""
+				+ ", searchForward=" + searchForward + ", latestHandledModActionID=" + latestModActionID
+				+ ", newestHandledModActionID=" + newestModActionID + ", updatedAt=" + updatedAt + ""
 				+ ", lastTimeHadFullHistory=" + lastTimeHadFullHistory + "]";
 	}
 }

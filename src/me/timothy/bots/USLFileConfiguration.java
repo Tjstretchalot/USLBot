@@ -40,6 +40,7 @@ public class USLFileConfiguration extends FileConfiguration {
 
 		addProperties("database", true, "url", "username", "password", "database");
 		addProperties("ftpbackups", true, "host", "username", "password", "knownhostsfile", "port", "dbfolder", "logsfolder", "secure");
+		addProperties("general", true, "ma_processor_extreme_trace");
 	}
 	
 }

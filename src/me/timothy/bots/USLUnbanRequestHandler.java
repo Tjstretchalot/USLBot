@@ -164,14 +164,7 @@ public class USLUnbanRequestHandler {
 			if(!USLUtils.potentiallyBannedOnSubreddit(database, banned.id, sub))
 				continue; // it is impossible for him to be banned right now, don't unban
 			
-			Response titleResponse = database.getResponseMapping().fetchByName("unban_request_valid_modmail_list_title");
-			Response bodyResponse = database.getResponseMapping().fetchByName("unban_request_valid_modmail_list_body");
-			
-			String titleString = new ResponseFormatter(titleResponse.responseBody, responseInfo).getFormattedResponse(config, database);
-			String bodyString = new ResponseFormatter(bodyResponse.responseBody, responseInfo).getFormattedResponse(config, database);
-			
-			modmailPMs.add(new ModmailPMInformation(sub, titleString, bodyString));
-			unbans.add(new UserUnbanInformation(banned, sub));
+			this.doUnbanActionForSubredditUsingResponseInfo(sub, responseInfo, unbans, modmailPMs, banned, "unban_request_valid_modmail_list");
 		}
 		
 		return new UnbanRequestResult(unbanReq, unbans, modmailPMs, userPMs, scammer, false);
@@ -295,13 +288,28 @@ public class USLUnbanRequestHandler {
 		modmailInfo.addLongtermString("original ban mod", sourceModerator.username);
 		modmailInfo.addLongtermString("original description", sourceHistory.banDescription);
 		
-		Response titleResponse = database.getResponseMapping().fetchByName("unban_request_valid_modmail_title");
-		Response bodyResponse = database.getResponseMapping().fetchByName("unban_request_valid_modmail_body");
-		
-		String titleString = new ResponseFormatter(titleResponse.responseBody, modmailInfo).getFormattedResponse(config, database);
-		String bodyString = new ResponseFormatter(bodyResponse.responseBody, modmailInfo).getFormattedResponse(config, database);
-		
-		unbans.add(new UserUnbanInformation(banned, sub));
-		modmailPMs.add(new ModmailPMInformation(sub, titleString, bodyString));
+		doUnbanActionForSubredditUsingResponseInfo(sub, modmailInfo, unbans, modmailPMs, banned, "unban_request_valid_modmail");
+	}
+	
+	protected void doUnbanActionForSubredditUsingResponseInfo(MonitoredSubreddit sub, ResponseInfo modmailInfo, 
+			List<UserUnbanInformation> unbans, List<ModmailPMInformation> modmailPMs, Person banned,
+			String responsePrefix) {
+		if(!sub.writeOnly) {
+			Response titleResponse = database.getResponseMapping().fetchByName(responsePrefix + "_title");
+			Response bodyResponse = database.getResponseMapping().fetchByName(responsePrefix + "_body");
+			String titleString = new ResponseFormatter(titleResponse.responseBody, modmailInfo).getFormattedResponse(config, database);
+			String bodyString = new ResponseFormatter(bodyResponse.responseBody, modmailInfo).getFormattedResponse(config, database);
+			
+			unbans.add(new UserUnbanInformation(banned, sub));
+			modmailPMs.add(new ModmailPMInformation(sub, titleString, bodyString));
+			
+		}else {
+			Response titleResponse = database.getResponseMapping().fetchByName(responsePrefix + "_writeonly_title");
+			Response bodyResponse = database.getResponseMapping().fetchByName(responsePrefix + "_writeonly_body");
+			String titleString = new ResponseFormatter(titleResponse.responseBody, modmailInfo).getFormattedResponse(config, database);
+			String bodyString = new ResponseFormatter(bodyResponse.responseBody, modmailInfo).getFormattedResponse(config, database);
+
+			modmailPMs.add(new ModmailPMInformation(sub, titleString, bodyString));
+		}
 	}
 }
