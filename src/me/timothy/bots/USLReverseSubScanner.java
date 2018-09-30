@@ -1,5 +1,9 @@
 package me.timothy.bots;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -84,6 +88,7 @@ public class USLReverseSubScanner {
 	private static boolean scanPage(Bot bot, USLDatabase database, USLFileConfiguration config, MonitoredSubreddit subreddit) {
 		String paginationID = getPaginationModActionID(database, subreddit);
 		Listing page = getPagePreceeding(bot, subreddit, paginationID);
+		printInformationAboutPage(page);
 		sleepFor(USLBotDriver.BRIEF_PAUSE_MS);
 		sendPageToProcessor(bot, database, config, page);
 		
@@ -107,10 +112,57 @@ public class USLReverseSubScanner {
 
 			@Override
 			protected Listing runImpl() throws Exception {
-				return RedditUtils.getModeratorLog(subreddit.subreddit, null, null, modActionID, null, bot.getUser());
+				return RedditUtils.getModeratorLog(subreddit.subreddit, null, null, modActionID, null, 500, bot.getUser());
 			}
 			
 		}.run();
+	}
+	
+	private static void printInformationAboutPage(Listing page) {
+		if(page.numChildren() == 0)
+		{
+			logger.printf(Level.TRACE, "Found a page with 0 children on it.");
+			return;
+		}
+		
+		int numModActions = 0;
+		for(int i = 0; i < page.numChildren(); i++) {
+			if(page.getChild(i) instanceof ModAction) {
+				numModActions++;
+			}
+		}
+		
+		if(numModActions == 0) {
+			logger.printf(Level.WARN, "Found a page with %d children yet no modactions on it. This is not good.", page.numChildren());
+			return;
+		}
+		
+		if(numModActions != page.numChildren()) {
+			logger.printf(Level.WARN, "Found a page with %d children yet only %d modactions on it.", page.numChildren(), numModActions);
+		}
+		
+		
+		ModAction newest = null, oldest = null;
+		for(int i = 0; i < page.numChildren(); i++) {
+			Thing child = page.getChild(i);
+			
+			if(child instanceof ModAction) {
+				ModAction ma = (ModAction)child;
+				
+				if(newest == null || ma.createdUTC() > newest.createdUTC()) {
+					newest = ma;
+				}
+				
+				if(oldest == null || ma.createdUTC() < oldest.createdUTC()) {
+					oldest = ma;
+				}
+			}
+		}
+		
+		String prettyNewestTime = SimpleDateFormat.getInstance().format(new Date((long)(newest.createdUTC() * 1000)));
+		String prettyOldestTime = SimpleDateFormat.getInstance().format(new Date((long)(oldest.createdUTC() * 1000)));
+		
+		logger.printf(Level.TRACE, "Found a page with %d actions between %s and %s", numModActions, prettyOldestTime, prettyNewestTime);
 	}
 
 	private static void sendPageToProcessor(Bot bot, USLDatabase database, USLFileConfiguration config, Listing listing) {

@@ -114,7 +114,7 @@ public class USLForwardSubScanner {
 
 			@Override
 			protected Listing runImpl() throws Exception {
-				return RedditUtils.getModeratorLog(subreddit.subreddit, null, null, null, modActionID, bot.getUser());
+				return RedditUtils.getModeratorLog(subreddit.subreddit, null, null, null, modActionID, 500, bot.getUser());
 			}
 			
 		}.run();

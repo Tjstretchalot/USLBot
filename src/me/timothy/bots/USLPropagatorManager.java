@@ -126,8 +126,8 @@ public class USLPropagatorManager {
 			propStatus = initMajorMinorStatus(toSub, fromSub);
 		}
 		
-		logger.printf(Level.TRACE, "Propagating actions that occurred AFTER %s on %s to %s", 
-				propStatus.latestPropagatedActionTime.toString(), fromSub.toString(), toSub.toString());
+		//logger.printf(Level.TRACE, "Propagating actions that occurred AFTER %s on %s to %s", 
+		//		propStatus.latestPropagatedActionTime.toString(), fromSub.toString(), toSub.toString());
 		
 		int[] hmaCounter = new int[] { 0 };
 		// We use an array here to get the equivalent of C-like & 

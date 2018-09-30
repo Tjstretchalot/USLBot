@@ -51,6 +51,10 @@ public class USLBotDriver extends BotDriver {
 	protected USLRegisterAccountRequestManager raqManager;
 	protected USLResetPasswordRequestManager rprManager;
 	
+	static {
+		BotDriver.BRIEF_PAUSE_MS = 2000;
+	}
+	
 	/**
 	 * Creates a new bot driver that has the specified context to
 	 * run in.
