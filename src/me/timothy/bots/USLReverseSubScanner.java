@@ -63,7 +63,7 @@ public class USLReverseSubScanner {
 	public static final boolean FINISHED = false;
 	
 	private static final int ACTIONS_PER_PAGE = 500;
-	private static final int MAX_PAGES_PER_SCAN = 8;
+	private static final int MAX_PAGES_PER_SCAN = 15;
 	private static final Logger logger = LogManager.getLogger();
 	
 	
@@ -177,7 +177,9 @@ public class USLReverseSubScanner {
 	}
 	
 	private static boolean isPageLastPage(Listing listing) {
-		if(listing.before() == null)
+		// reddit api doesn't actually do before very well so we have to use a crude method
+		// if we want any sort of consistency
+		if(listing.before() == null && listing.numChildren() < ACTIONS_PER_PAGE)
 			return true;
 		
 		for(int i = 0; i < listing.numChildren(); i++) {
