@@ -122,6 +122,8 @@ public class UnbanRequestHandlerTest {
 		database.getResponseMapping().save(new Response(-1, "unban_request_valid_modmail_title", "<unban mod> removed <unbanned user> from USL", new Timestamp(now), new Timestamp(now)));
 		database.getResponseMapping().save(new Response(-1, "unban_request_valid_modmail_body", "I have unbanned /u/<unbanned user> on the request of /u/<unban mod>. /u/<unbanned user> was originally banned on "
 				+ "/r/<original ban subreddit> by /u/<original ban mod>, with the description <original description>", new Timestamp(now), new Timestamp(now)));
+		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_authorized_title", "auth title", new Timestamp(now), new Timestamp(now)));
+		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_authorized_body", "auth body", new Timestamp(now), new Timestamp(now)));
 		
 		UnbanRequestResult result = handler.handleUnbanRequest(paulUnbanJohnRequest);
 		assertEquals(paulUnbanJohnRequest, result.unbanRequest);
@@ -147,7 +149,10 @@ public class UnbanRequestHandlerTest {
 			assertEquals(ericsSub, result.modmailPMs.get(0).subreddit);
 			assertEquals(paulsSub, result.modmailPMs.get(1).subreddit);
 		}
-		assertEquals(0, result.userPMs.size());
+		assertEquals(1, result.userPMs.size());
+		assertEquals(paul, result.userPMs.get(0).person);
+		assertEquals("auth title", result.userPMs.get(0).title);
+		assertEquals("auth body", result.userPMs.get(0).body);
 		assertFalse(result.invalid);
 		assertNull(result.scammerToRemove);
 	}
@@ -305,11 +310,17 @@ public class UnbanRequestHandlerTest {
 		
 		UnbanRequest emmaUnbanEllaReq = new UnbanRequest(-1, emma.id, ella.id, new Timestamp(now), null, false);
 		database.getUnbanRequestMapping().save(emmaUnbanEllaReq);
+
+		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_authorized_title", "auth title", new Timestamp(now), new Timestamp(now)));
+		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_authorized_body", "auth body", new Timestamp(now), new Timestamp(now)));
 		
 		UnbanRequestResult result = handler.handleUnbanRequest(emmaUnbanEllaReq);
 		assertEquals(0, result.unbans.size());
 		assertEquals(0, result.modmailPMs.size());
-		assertEquals(0, result.userPMs.size());
+		assertEquals(1, result.userPMs.size());
+		assertEquals(emma, result.userPMs.get(0).person);
+		assertEquals("auth title", result.userPMs.get(0).title);
+		assertEquals("auth body", result.userPMs.get(0).body);
 		assertNull(result.scammerToRemove);
 		assertEquals(false, result.invalid);
 	}

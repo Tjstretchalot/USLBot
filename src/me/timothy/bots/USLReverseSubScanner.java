@@ -61,8 +61,9 @@ public class USLReverseSubScanner {
 	 * The result if there's no more stuff to do
 	 */
 	public static final boolean FINISHED = false;
-
-	private static final int MAX_PAGES_PER_SCAN = 3;
+	
+	private static final int ACTIONS_PER_PAGE = 500;
+	private static final int MAX_PAGES_PER_SCAN = 8;
 	private static final Logger logger = LogManager.getLogger();
 	
 	
@@ -88,14 +89,14 @@ public class USLReverseSubScanner {
 	private static boolean scanPage(Bot bot, USLDatabase database, USLFileConfiguration config, MonitoredSubreddit subreddit) {
 		String paginationID = getPaginationModActionID(database, subreddit);
 		Listing page = getPagePreceeding(bot, subreddit, paginationID);
-		printInformationAboutPage(page);
+		printInformationAboutPage(page, paginationID);
 		sleepFor(USLBotDriver.BRIEF_PAUSE_MS);
 		sendPageToProcessor(bot, database, config, page);
 		
 		if(isPageLastPage(page))
 			return FINISHED;
 		
-		String newPaginationID = getNewPaginationModActionID(page);
+		String newPaginationID = getNewPaginationModActionID(page, paginationID);
 		updatePaginationModActionID(database, subreddit, newPaginationID);
 		return CONTINUE;
 	}
@@ -112,16 +113,16 @@ public class USLReverseSubScanner {
 
 			@Override
 			protected Listing runImpl() throws Exception {
-				return RedditUtils.getModeratorLog(subreddit.subreddit, null, null, modActionID, null, 500, bot.getUser());
+				return RedditUtils.getModeratorLog(subreddit.subreddit, null, null, modActionID, null, ACTIONS_PER_PAGE, bot.getUser());
 			}
 			
 		}.run();
 	}
 	
-	private static void printInformationAboutPage(Listing page) {
+	private static void printInformationAboutPage(Listing page, String paginationID) {
 		if(page.numChildren() == 0)
 		{
-			logger.printf(Level.TRACE, "Found a page with 0 children on it.");
+			logger.printf(Level.TRACE, "Page before %s has 0 children.", paginationID);
 			return;
 		}
 		
@@ -133,12 +134,12 @@ public class USLReverseSubScanner {
 		}
 		
 		if(numModActions == 0) {
-			logger.printf(Level.WARN, "Found a page with %d children yet no modactions on it. This is not good.", page.numChildren());
+			logger.printf(Level.WARN, "Page before %s has %d children yet no modactions on it. This is not good.", paginationID, page.numChildren());
 			return;
 		}
 		
 		if(numModActions != page.numChildren()) {
-			logger.printf(Level.WARN, "Found a page with %d children yet only %d modactions on it.", page.numChildren(), numModActions);
+			logger.printf(Level.WARN, "Page before %s has %d children yet only %d modactions on it.", paginationID, page.numChildren(), numModActions);
 		}
 		
 		
@@ -162,7 +163,7 @@ public class USLReverseSubScanner {
 		String prettyNewestTime = SimpleDateFormat.getInstance().format(new Date((long)(newest.createdUTC() * 1000)));
 		String prettyOldestTime = SimpleDateFormat.getInstance().format(new Date((long)(oldest.createdUTC() * 1000)));
 		
-		logger.printf(Level.TRACE, "Found a page with %d actions between %s and %s", numModActions, prettyOldestTime, prettyNewestTime);
+		logger.printf(Level.TRACE, "Page before %s has %d actions between %s and %s", paginationID, numModActions, prettyOldestTime, prettyNewestTime);
 	}
 
 	private static void sendPageToProcessor(Bot bot, USLDatabase database, USLFileConfiguration config, Listing listing) {
@@ -176,6 +177,9 @@ public class USLReverseSubScanner {
 	}
 	
 	private static boolean isPageLastPage(Listing listing) {
+		if(listing.before() == null)
+			return true;
+		
 		for(int i = 0; i < listing.numChildren(); i++) {
 			if(listing.getChild(i) instanceof ModAction)
 				return false;
@@ -184,11 +188,14 @@ public class USLReverseSubScanner {
 		return true;
 	}
 
-	private static String getNewPaginationModActionID(Listing listing) {
+	private static String getNewPaginationModActionID(Listing page, String oldPaginationID) {
+		if(page.before() != null)
+			return page.before();
+		
 		ModAction newest = null;
 		
-		for(int i = 0; i < listing.numChildren(); i++) {
-			Thing child = listing.getChild(i);
+		for(int i = 0; i < page.numChildren(); i++) {
+			Thing child = page.getChild(i);
 			
 			if(child instanceof ModAction) {
 				ModAction ma = (ModAction) child;
