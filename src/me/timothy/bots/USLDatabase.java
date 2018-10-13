@@ -105,6 +105,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		}
 		
 		connection = DriverManager.getConnection(url, username, password);
+		connection.setAutoCommit(true);
 
 		mappings = new ArrayList<>();
 		mappingsDict = new HashMap<>();

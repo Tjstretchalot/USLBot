@@ -51,9 +51,9 @@ public class MysqlTraditionalScammerMapping extends MysqlObjectWithIDMapping<Tra
 			
 			if(a.id > 0) {
 				statement.setInt(counter++, a.id);
-				statement.executeUpdate();
+				statement.execute();
 			}else {
-				statement.executeUpdate();
+				statement.execute();
 				
 				ResultSet keys = statement.getGeneratedKeys();
 				if(!keys.next()) {
@@ -89,7 +89,9 @@ public class MysqlTraditionalScammerMapping extends MysqlObjectWithIDMapping<Tra
 			int counter = 1;
 			statement.setInt(counter++, personID);
 			
-			statement.executeUpdate();
+			statement.execute();
+			
+			statement.close();
 		}catch(SQLException e) {
 			logger.throwing(e);
 			throw new RuntimeException(e);

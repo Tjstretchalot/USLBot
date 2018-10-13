@@ -182,12 +182,39 @@ public class USLUnbanRequestHandler {
 			
 		}
 
+		List<UserActionInfo> actions = new ArrayList<>(); 
 		List<MonitoredSubreddit> allSubs = database.getMonitoredSubredditMapping().fetchAll();
 		for(MonitoredSubreddit sub : allSubs) {
-			if(!USLUtils.potentiallyBannedOnSubreddit(database, banned.id, sub))
+			if(!USLUtils.potentiallyBannedOnSubreddit(database, banned.id, sub)) {
+				actions.add(new UserActionInfo(sub.subreddit, "nothing (definitely not banned there)"));
 				continue; // it is impossible for him to be banned right now, don't unban
+			}
 			
-			this.doUnbanActionForSubredditUsingResponseInfo(sub, responseInfo, unbans, modmailPMs, banned, "unban_request_valid_modmail_list");
+			String act = this.doUnbanActionForSubredditUsingResponseInfo(sub, responseInfo, unbans, modmailPMs, banned, "unban_request_valid_modmail_list");
+			
+			actions.add(new UserActionInfo(sub.subreddit, act));
+		}
+		
+		{
+			// We should tell the guy who requested it that we did stuff
+			
+			Response titleResponse = database.getResponseMapping().fetchByName("unban_request_removed_from_list_authorized_title");
+			Response bodyResponse = database.getResponseMapping().fetchByName("unban_request_removed_from_list_authorized_body");
+			
+			ResponseInfo oResponseInfo = new ResponseInfo(responseInfo);
+			
+			String actTable = "Subreddit|Action\n:--|:--";
+			
+			for(UserActionInfo act : actions) {
+				actTable += "\n" + act.subreddit + "|" + act.action;
+			}
+			
+			oResponseInfo.addLongtermString("actions table", actTable);
+			
+			String titleString = new ResponseFormatter(titleResponse.responseBody, oResponseInfo).getFormattedResponse(config, database);
+			String bodyString = new ResponseFormatter(bodyResponse.responseBody, oResponseInfo).getFormattedResponse(config, database);
+			
+			userPMs.add(new UserPMInformation(moderator, titleString, bodyString));
 		}
 		
 		return new UnbanRequestResult(unbanReq, unbans, modmailPMs, userPMs, scammer, false);
@@ -433,6 +460,7 @@ public class USLUnbanRequestHandler {
 		respInfo.addLongtermString("original ban mod", sourceModerator.username);
 		respInfo.addLongtermString("original description", sourceHistory.banDescription);
 		respInfo.addLongtermString("original details", sourceHistory.banDetails);
+		respInfo.addLongtermString("original ban date", SimpleDateFormat.getDateTimeInstance().format(sourceHMA.occurredAt));
 		respInfo.addLongtermString("reasons table", reasonsTable);
 		respInfo.addLongtermString("actions table", actionsTable);
 		

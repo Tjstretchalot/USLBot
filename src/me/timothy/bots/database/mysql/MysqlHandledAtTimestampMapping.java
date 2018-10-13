@@ -38,7 +38,7 @@ public class MysqlHandledAtTimestampMapping extends MysqlObjectMapping<HandledAt
 			statement.setInt(counter++, a.minorSubredditID);
 			statement.setInt(counter++, a.handledModActionID);
 			
-			statement.executeUpdate();
+			statement.execute();
 			statement.close();
 		}catch(SQLException e) {
 			logger.throwing(e);

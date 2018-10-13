@@ -89,7 +89,7 @@ public class USLReverseSubScanner {
 	private static boolean scanPage(Bot bot, USLDatabase database, USLFileConfiguration config, MonitoredSubreddit subreddit) {
 		String paginationID = getPaginationModActionID(database, subreddit);
 		Listing page = getPagePreceeding(bot, subreddit, paginationID);
-		printInformationAboutPage(page, paginationID);
+		printInformationAboutPage(subreddit, page, paginationID);
 		sleepFor(USLBotDriver.BRIEF_PAUSE_MS);
 		sendPageToProcessor(bot, database, config, page);
 		
@@ -97,6 +97,11 @@ public class USLReverseSubScanner {
 			return FINISHED;
 		
 		String newPaginationID = getNewPaginationModActionID(page, paginationID);
+		if(newPaginationID.equals(paginationID))
+			logger.printf(Level.ERROR, "Pagination id did not change even though not the last page? Still is %s", newPaginationID);
+		else
+			logger.printf(Level.TRACE, "Determined new pag id for sub %s (id=%d) should be %s", subreddit.subreddit, subreddit.id, newPaginationID);
+		
 		updatePaginationModActionID(database, subreddit, newPaginationID);
 		return CONTINUE;
 	}
@@ -119,10 +124,10 @@ public class USLReverseSubScanner {
 		}.run();
 	}
 	
-	private static void printInformationAboutPage(Listing page, String paginationID) {
+	private static void printInformationAboutPage(MonitoredSubreddit subreddit, Listing page, String paginationID) {
 		if(page.numChildren() == 0)
 		{
-			logger.printf(Level.TRACE, "Page before %s has 0 children.", paginationID);
+			logger.printf(Level.TRACE, "%s: Page before %s has 0 children.", subreddit.subreddit, paginationID);
 			return;
 		}
 		
@@ -134,12 +139,12 @@ public class USLReverseSubScanner {
 		}
 		
 		if(numModActions == 0) {
-			logger.printf(Level.WARN, "Page before %s has %d children yet no modactions on it. This is not good.", paginationID, page.numChildren());
+			logger.printf(Level.WARN, "%s: Page before %s has %d children yet no modactions on it. This is not good.", subreddit.subreddit, paginationID, page.numChildren());
 			return;
 		}
 		
 		if(numModActions != page.numChildren()) {
-			logger.printf(Level.WARN, "Page before %s has %d children yet only %d modactions on it.", paginationID, page.numChildren(), numModActions);
+			logger.printf(Level.WARN, "%s: Page before %s has %d children yet only %d modactions on it.", subreddit.subreddit, paginationID, page.numChildren(), numModActions);
 		}
 		
 		
@@ -163,7 +168,7 @@ public class USLReverseSubScanner {
 		String prettyNewestTime = SimpleDateFormat.getInstance().format(new Date((long)(newest.createdUTC() * 1000)));
 		String prettyOldestTime = SimpleDateFormat.getInstance().format(new Date((long)(oldest.createdUTC() * 1000)));
 		
-		logger.printf(Level.TRACE, "Page before %s has %d actions between %s and %s", paginationID, numModActions, prettyOldestTime, prettyNewestTime);
+		logger.printf(Level.TRACE, "%s: Page before %s has %d actions between %s and %s", subreddit.subreddit, paginationID, numModActions, prettyOldestTime, prettyNewestTime);
 	}
 
 	private static void sendPageToProcessor(Bot bot, USLDatabase database, USLFileConfiguration config, Listing listing) {
@@ -213,6 +218,9 @@ public class USLReverseSubScanner {
 
 	private static void updatePaginationModActionID(USLDatabase database, MonitoredSubreddit sub, String newID) {
 		SubredditModqueueProgress progress = database.getSubredditModqueueProgressMapping().fetchForSubreddit(sub.id);
+		if(progress.monitoredSubredditID != sub.id)
+			throw new RuntimeException("SubredditModqueueProgressMapping : progress.monitoredSubredditID = " + progress.monitoredSubredditID + "; sub.id = " + sub.id);
+		
 		progress.newestModActionID = newID;
 		database.getSubredditModqueueProgressMapping().save(progress);
 	}

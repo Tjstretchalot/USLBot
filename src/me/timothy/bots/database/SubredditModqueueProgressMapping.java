@@ -21,4 +21,12 @@ public interface SubredditModqueueProgressMapping extends ObjectMapping<Subreddi
 	 * @return the progress for that id.
 	 */
 	public SubredditModqueueProgress fetchForSubreddit(int monitoredSubredditID);
+	
+	
+	/**
+	 * Fetch the modqueue progress for the specified id.
+	 * @param id the id of the progress to fetch
+	 * @return the progress
+	 */
+	public SubredditModqueueProgress fetchByID(int id);
 }

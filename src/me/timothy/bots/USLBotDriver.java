@@ -336,12 +336,14 @@ public class USLBotDriver extends BotDriver {
 		
 		if(progress.searchForward) {
 			boolean result = USLForwardSubScanner.scan(bot, db, cfg, sub);
+			progress = db.getSubredditModqueueProgressMapping().fetchByID(progress.id);
 			if(result == USLForwardSubScanner.FINISHED) {
 				progress.searchForward = false;
 				db.getSubredditModqueueProgressMapping().save(progress);
 			}
 		}else {
 			boolean result = USLReverseSubScanner.scan(bot, db, cfg, sub);
+			progress = db.getSubredditModqueueProgressMapping().fetchByID(progress.id);
 			if(result == USLReverseSubScanner.FINISHED) {
 				progress.lastTimeHadFullHistory = new Timestamp(System.currentTimeMillis());
 			}else {

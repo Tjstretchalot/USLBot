@@ -52,9 +52,9 @@ public class MysqlHandledModActionMapping extends MysqlObjectWithIDMapping<Handl
 			
 			if(a.id > 0) {
 				statement.setInt(counter++, a.id);
-				statement.executeUpdate();
+				statement.execute();
 			}else {
-				statement.executeUpdate();
+				statement.execute();
 				
 				ResultSet keys = statement.getGeneratedKeys();
 				if(!keys.next()) {
