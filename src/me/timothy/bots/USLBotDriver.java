@@ -13,6 +13,7 @@ import org.json.simple.parser.ParseException;
 import me.timothy.bots.database.ActionLogMapping;
 import me.timothy.bots.memory.ModmailPMInformation;
 import me.timothy.bots.memory.PropagateResult;
+import me.timothy.bots.memory.TemporaryAuthGranterResult;
 import me.timothy.bots.memory.TraditionalScammerHandlerResult;
 import me.timothy.bots.memory.UnbanRequestResult;
 import me.timothy.bots.memory.UserBanInformation;
@@ -50,6 +51,7 @@ public class USLBotDriver extends BotDriver {
 	protected USLTraditionalScammerHandler scammerHandler;
 	protected USLRegisterAccountRequestManager raqManager;
 	protected USLResetPasswordRequestManager rprManager;
+	protected USLTemporaryAuthGranter taHandler;
 	
 	static {
 		BotDriver.BRIEF_PAUSE_MS = 2000;
@@ -79,6 +81,7 @@ public class USLBotDriver extends BotDriver {
 		scammerHandler = new USLTraditionalScammerHandler(database, config);
 		raqManager = new USLRegisterAccountRequestManager(database, config);
 		rprManager = new USLResetPasswordRequestManager(database, config);
+		taHandler = new USLTemporaryAuthGranter(database, config, (sub, person) -> isModerator(sub, person), (result) -> handleTempAuthResult(result));
 	}
 
 	@Override
@@ -110,6 +113,10 @@ public class USLBotDriver extends BotDriver {
 		al.append("Handling unban requests..");
 		logger.trace("Handling unban requests..");
 		handleUnbanRequests();
+		
+		al.append("Handling authorization requests..");
+		logger.trace("Handling authorization requests..");
+		handleAuthorizationRequests();
 		
 		al.append("Propagating people that are on the traditional scammer list..");
 		logger.trace("Handling people on old style list..");
@@ -190,6 +197,13 @@ public class USLBotDriver extends BotDriver {
 				handleUnbanRequestResult(unbanReq, result, mod, toUnban);
 			}
 		}
+	}
+	
+	/**
+	 * Handle any authorization requests
+	 */
+	protected void handleAuthorizationRequests() {
+		taHandler.handleRequests();
 	}
 	
 	/**
@@ -373,6 +387,19 @@ public class USLBotDriver extends BotDriver {
 		boolean didSomething = false;
 		didSomething = handleBans(result.bans) || didSomething;
 		didSomething = handleModmailPMs(result.modmailPMs) || didSomething;
+		didSomething = handleUserPMs(result.userPMs) || didSomething;
+		return didSomething;
+	}
+	
+	/**
+	 * Do the things the resutl says to do.
+	 * 
+	 * @param result the result
+	 * @return if any reddit requests were done
+	 */
+	protected boolean handleTempAuthResult(TemporaryAuthGranterResult result) {
+		boolean didSomething = false;
+		didSomething = handleModmailPMs(result.subredditPMs) || didSomething;
 		didSomething = handleUserPMs(result.userPMs) || didSomething;
 		return didSomething;
 	}

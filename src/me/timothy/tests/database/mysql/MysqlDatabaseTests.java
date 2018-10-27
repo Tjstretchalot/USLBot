@@ -24,7 +24,9 @@ import org.junit.runners.Suite.SuiteClasses;
 			MysqlLastInfoPMMappingTest.class,
 			MysqlRegisterAccountMappingTest.class,
 			MysqlResetPasswordRequestMappingTest.class,
-			MysqlActionLogMappingTest.class
+			MysqlActionLogMappingTest.class,
+			MysqlTemporaryAuthLevelMappingTest.class,
+			MysqlTemporaryAuthRequestMappingTest.class
 		})
 public class MysqlDatabaseTests {
 

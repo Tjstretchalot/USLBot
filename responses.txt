@@ -41,3 +41,14 @@ unclaimed_account_reset_password_body = same as title
 reset_password_title = <username>, <id>, <token>
 reset_password_body = same as title
 
+tauth_too_soon_title = <username>, <auth level time>, <request time>, <next acceptable time>
+tauth_too_soon_body = same as title
+
+tauth_authorized_title = <username>, <request time>, <expires time>
+tauth_authorized_body = same as title
+
+tauth_unauthorized_to_requester_title = <username>, <request time>, <next retry time>
+tauth_unauthorized_to_requester_body = same as title
+
+tauth_unauthorized_to_subreddit_title = <username>, <request time>, <next retry time>
+tauth_unauthorized_to_subreddit_body = same as title

@@ -29,6 +29,8 @@ import me.timothy.bots.database.SubredditModqueueProgressMapping;
 import me.timothy.bots.database.SubredditPropagateStatusMapping;
 import me.timothy.bots.database.SubredditTraditionalListStatusMapping;
 import me.timothy.bots.database.SubscribedHashtagMapping;
+import me.timothy.bots.database.TemporaryAuthLevelMapping;
+import me.timothy.bots.database.TemporaryAuthRequestMapping;
 import me.timothy.bots.database.TraditionalScammerMapping;
 import me.timothy.bots.database.UnbanHistoryMapping;
 import me.timothy.bots.database.UnbanRequestMapping;
@@ -48,6 +50,8 @@ import me.timothy.bots.database.mysql.MysqlSubredditModqueueProgressMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditPropagateStatusMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditTraditionalListStatusMapping;
 import me.timothy.bots.database.mysql.MysqlSubscribedHashtagMapping;
+import me.timothy.bots.database.mysql.MysqlTemporaryAuthLevelMapping;
+import me.timothy.bots.database.mysql.MysqlTemporaryAuthRequestMapping;
 import me.timothy.bots.database.mysql.MysqlTraditionalScammerMapping;
 import me.timothy.bots.database.mysql.MysqlUnbanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlUnbanRequestMapping;
@@ -67,6 +71,8 @@ import me.timothy.bots.models.SubredditModqueueProgress;
 import me.timothy.bots.models.SubredditPropagateStatus;
 import me.timothy.bots.models.SubredditTraditionalListStatus;
 import me.timothy.bots.models.SubscribedHashtag;
+import me.timothy.bots.models.TemporaryAuthLevel;
+import me.timothy.bots.models.TemporaryAuthRequest;
 import me.timothy.bots.models.TraditionalScammer;
 import me.timothy.bots.models.UnbanHistory;
 import me.timothy.bots.models.UnbanRequest;
@@ -128,6 +134,8 @@ public class USLDatabase extends Database implements MappingDatabase {
 		addMapping(RegisterAccountRequest.class, new MysqlRegisterAccountRequestMapping(this, connection));
 		addMapping(ResetPasswordRequest.class, new MysqlResetPasswordRequestMapping(this, connection));
 		addMapping(ActionLog.class, new MysqlActionLogMapping(this, connection));
+		addMapping(TemporaryAuthLevel.class, new MysqlTemporaryAuthLevelMapping(this, connection));
+		addMapping(TemporaryAuthRequest.class, new MysqlTemporaryAuthRequestMapping(this, connection));
 	}
 
 	private <A> void addMapping(Class<A> cl, ObjectMapping<A> mapping) {
@@ -268,6 +276,16 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public ActionLogMapping getActionLogMapping() {
 		return (ActionLogMapping) mappingsDict.get(ActionLog.class);
+	}
+	
+	@Override
+	public TemporaryAuthLevelMapping getTemporaryAuthLevelMapping() {
+		return (TemporaryAuthLevelMapping) mappingsDict.get(TemporaryAuthLevel.class);
+	}
+	
+	@Override
+	public TemporaryAuthRequestMapping getTemporaryAuthRequestMapping() {
+		return (TemporaryAuthRequestMapping) mappingsDict.get(TemporaryAuthRequest.class);
 	}
 	
 	/**

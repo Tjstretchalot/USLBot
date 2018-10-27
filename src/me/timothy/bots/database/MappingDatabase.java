@@ -26,4 +26,6 @@ public interface MappingDatabase {
 	public RegisterAccountRequestMapping getRegisterAccountRequestMapping();
 	public ResetPasswordRequestMapping getResetPasswordRequestMapping(); 
 	public ActionLogMapping getActionLogMapping();
+	public TemporaryAuthLevelMapping getTemporaryAuthLevelMapping();
+	public TemporaryAuthRequestMapping getTemporaryAuthRequestMapping();
 }

@@ -55,7 +55,7 @@ public class USLPropagator {
 	protected USLDatabase database;
 	
 	/**
-	 * Create a new instance of the USLBanHistoryPropagator using configuration
+	 * Create a new instance of the USLPropagator using configuration
 	 * information from config and uses the database for storage.
 	 * 
 	 * @param config config
