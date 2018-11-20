@@ -26,7 +26,8 @@ import org.junit.runners.Suite.SuiteClasses;
 			MysqlResetPasswordRequestMappingTest.class,
 			MysqlActionLogMappingTest.class,
 			MysqlTemporaryAuthLevelMappingTest.class,
-			MysqlTemporaryAuthRequestMappingTest.class
+			MysqlTemporaryAuthRequestMappingTest.class,
+			MysqlAcceptModeratorInviteRequestMappingTest.class
 		})
 public class MysqlDatabaseTests {
 

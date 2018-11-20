@@ -10,6 +10,7 @@ import java.util.Map;
 
 import org.apache.logging.log4j.Logger;
 
+import me.timothy.bots.database.AcceptModeratorInviteRequestMapping;
 import me.timothy.bots.database.ActionLogMapping;
 import me.timothy.bots.database.BanHistoryMapping;
 import me.timothy.bots.database.FullnameMapping;
@@ -34,6 +35,7 @@ import me.timothy.bots.database.TemporaryAuthRequestMapping;
 import me.timothy.bots.database.TraditionalScammerMapping;
 import me.timothy.bots.database.UnbanHistoryMapping;
 import me.timothy.bots.database.UnbanRequestMapping;
+import me.timothy.bots.database.mysql.MysqlAcceptModeratorInviteRequestMapping;
 import me.timothy.bots.database.mysql.MysqlActionLogMapping;
 import me.timothy.bots.database.mysql.MysqlBanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlFullnameMapping;
@@ -55,6 +57,7 @@ import me.timothy.bots.database.mysql.MysqlTemporaryAuthRequestMapping;
 import me.timothy.bots.database.mysql.MysqlTraditionalScammerMapping;
 import me.timothy.bots.database.mysql.MysqlUnbanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlUnbanRequestMapping;
+import me.timothy.bots.models.AcceptModeratorInviteRequest;
 import me.timothy.bots.models.ActionLog;
 import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.Fullname;
@@ -136,6 +139,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		addMapping(ActionLog.class, new MysqlActionLogMapping(this, connection));
 		addMapping(TemporaryAuthLevel.class, new MysqlTemporaryAuthLevelMapping(this, connection));
 		addMapping(TemporaryAuthRequest.class, new MysqlTemporaryAuthRequestMapping(this, connection));
+		addMapping(AcceptModeratorInviteRequest.class, new MysqlAcceptModeratorInviteRequestMapping(this, connection));
 	}
 
 	private <A> void addMapping(Class<A> cl, ObjectMapping<A> mapping) {
@@ -286,6 +290,11 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public TemporaryAuthRequestMapping getTemporaryAuthRequestMapping() {
 		return (TemporaryAuthRequestMapping) mappingsDict.get(TemporaryAuthRequest.class);
+	}
+	
+	@Override
+	public AcceptModeratorInviteRequestMapping getAcceptModeratorInviteRequestMapping() {
+		return (AcceptModeratorInviteRequestMapping) mappingsDict.get(AcceptModeratorInviteRequest.class);
 	}
 	
 	/**

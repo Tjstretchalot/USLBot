@@ -19,6 +19,7 @@ import me.timothy.bots.memory.UnbanRequestResult;
 import me.timothy.bots.memory.UserBanInformation;
 import me.timothy.bots.memory.UserPMInformation;
 import me.timothy.bots.memory.UserUnbanInformation;
+import me.timothy.bots.models.AcceptModeratorInviteRequest;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
 import me.timothy.bots.models.SubredditModqueueProgress;
@@ -28,6 +29,7 @@ import me.timothy.bots.models.UnbanRequest;
 import me.timothy.bots.summon.CommentSummon;
 import me.timothy.bots.summon.LinkSummon;
 import me.timothy.bots.summon.PMSummon;
+import me.timothy.jreddit.RedditUtils;
 
 /**
  * The bot driver for the universal scammer list bot. Contains
@@ -106,6 +108,9 @@ public class USLBotDriver extends BotDriver {
 		logger.trace("Sending out reset password messages..");
 		sendResetPasswordMessages();
 		
+		logger.trace("Handling accept moderator invite requests..");
+		handleAcceptModeratorInviteRequests();
+		
 		al.append("Checking personal messages..");
 		logger.trace("Checking personal messages..");
 		scanPersonalMessages();
@@ -157,6 +162,34 @@ public class USLBotDriver extends BotDriver {
 		List<UserPMInformation> userPms = rprManager.sendResetPasswordRequests();
 		
 		handleUserPMs(userPms);
+	}
+	
+	/**
+	 * Handle the accept moderator invite requests.
+	 */
+	protected void handleAcceptModeratorInviteRequests() {
+		USLDatabase db = (USLDatabase) database;
+		
+		List<AcceptModeratorInviteRequest> reqs = db.getAcceptModeratorInviteRequestMapping().fetchUnfulfilled(10);
+		for(AcceptModeratorInviteRequest req : reqs) {
+			logger.printf(Level.INFO, "Handling moderator invite request: %s", req.prettyToString(db)); 
+			
+			boolean success = false;
+			try {
+				success = RedditUtils.acceptModeratorInvite(req.subreddit, bot.getUser());
+			} catch (IOException | ParseException e) {
+				logger.catching(e);
+				
+				logger.printf(Level.ERROR, "Handling of the invite %s failed spectacularly!", req.toString());
+				success = true;
+			}
+			
+			req.fulfilledAt = new Timestamp(System.currentTimeMillis());
+			req.success = success;
+			db.getAcceptModeratorInviteRequestMapping().save(req);
+			
+			logger.printf(Level.INFO, "Mod invite request done. Result: %s", req.prettyToString(db));
+		}
 	}
 	
 	/**

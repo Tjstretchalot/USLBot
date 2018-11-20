@@ -28,4 +28,5 @@ public interface MappingDatabase {
 	public ActionLogMapping getActionLogMapping();
 	public TemporaryAuthLevelMapping getTemporaryAuthLevelMapping();
 	public TemporaryAuthRequestMapping getTemporaryAuthRequestMapping();
+	public AcceptModeratorInviteRequestMapping getAcceptModeratorInviteRequestMapping();
 }
