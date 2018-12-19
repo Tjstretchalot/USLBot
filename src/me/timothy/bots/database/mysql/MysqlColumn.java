@@ -20,7 +20,7 @@ public class MysqlColumn {
 		LONGNVARCHAR(Types.LONGNVARCHAR, "longnvarchar"),
 		LONGVARCHAR(Types.LONGVARCHAR, "text"),
 		VARCHAR(Types.VARCHAR, "varchar"),
-		BIT(Types.BIT, "tinyint"),
+		BIT(Types.BIT, "bit"),
 		TIMESTAMP(Types.TIMESTAMP, "timestamp")
 		
 		;

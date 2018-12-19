@@ -1,472 +1,469 @@
 package me.timothy.bots;
 
+import static me.timothy.bots.ResponseUtils.verifyFormat;
+
+import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import me.timothy.bots.functions.IsModeratorFunction;
-import me.timothy.bots.memory.ModmailPMInformation;
+import me.timothy.bots.memory.HandledModActionJoinHistory;
 import me.timothy.bots.memory.UnbanRequestResult;
 import me.timothy.bots.memory.UserPMInformation;
-import me.timothy.bots.memory.UserUnbanInformation;
 import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.HandledModAction;
+import me.timothy.bots.models.Hashtag;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
-import me.timothy.bots.models.Response;
+import me.timothy.bots.models.SubscribedHashtag;
 import me.timothy.bots.models.TraditionalScammer;
-import me.timothy.bots.models.UnbanHistory;
+import me.timothy.bots.models.USLAction;
+import me.timothy.bots.models.USLActionBanHistory;
+import me.timothy.bots.models.USLActionHashtag;
 import me.timothy.bots.models.UnbanRequest;
 import me.timothy.bots.responses.ResponseFormatter;
 import me.timothy.bots.responses.ResponseInfo;
 import me.timothy.bots.responses.ResponseInfoFactory;
 
 /**
- * Figures out what to do with unban requests
+ * Determines if an unban request is valid and responds to the user explaining what it decided
+ * and why.
  * 
  * @author Timothy
  */
 public class USLUnbanRequestHandler {
-	/**
-	 * This is used for responding to the person who banned us all the 
-	 * actions we took from their request and WHY we took those actions.
-	 * This is a pain to figure out just from what we did, hence the 
-	 * second list.
-	 * 
-	 * @author Timothy
-	 */
-	protected class UserActionInfo {
-		public String subreddit;
-		public String action;
-		
-		public UserActionInfo(String sub, String act) {
-			subreddit = sub;
-			action = act;
-		}
-	}
-	
-	/**
-	 * Contains all the mappings to/from the relational database
-	 */
 	protected USLDatabase database;
-	
-	/**
-	 * Contains all the simple static configuration options saved in
-	 * a flat file format
-	 */
 	protected USLFileConfiguration config;
+	protected IsModeratorFunction isModerator;
 	
-	/**
-	 * How to determine if a user is a moderator of a subreddit
-	 */
-	protected IsModeratorFunction isModeratorFunction;
+	protected Person currentMod;
+	protected Map<String, Boolean> modCache;
 	
-	/**
-	 * Create a new unban request handler attached to the specified database and 
-	 * configuration
-	 * 
-	 * @param database the database
-	 * @param config the file configuration
-	 */
-	public USLUnbanRequestHandler(USLDatabase database, USLFileConfiguration config,
-			IsModeratorFunction isModeratorFunction) {
+	public USLUnbanRequestHandler(USLDatabase database, USLFileConfiguration config, IsModeratorFunction isModerator) {
 		this.database = database;
 		this.config = config;
-		this.isModeratorFunction = isModeratorFunction;
+		this.isModerator = isModerator;
+		
+		modCache = new HashMap<>();
 	}
 	
 	/**
-	 * Determines what to do as a result of an unban request. Does not actually 
-	 * change anything in the database, but does fetch information from it. The
-	 * driver must handle deciding when to handle unban requests and determining
-	 * which ones have already been handled!
-	 * 
-	 * @param unbanRequest the unban request
-	 * @return what to do about it
+	 * Checks to make sure that the database is not missing any responses.
 	 */
-	public UnbanRequestResult handleUnbanRequest(UnbanRequest unbanRequest) {
-		Person moderator = database.getPersonMapping().fetchByID(unbanRequest.modPersonID);
-		Person banned = database.getPersonMapping().fetchByID(unbanRequest.bannedPersonID);
+	public void verifyHaveResponses() {
+		verifyFormat(database, "unban_request_to_mod_denied_generic_title", 
+				"The title of the pm to send to the person who sent us an unban request when we are denying them and we don't know "
+				+ "of any reason to trust them.",
+				"mod", "The username of the person who made the request",
+				"banned", "The username of the person they tried to unban");
 		
-		TraditionalScammer scammer = database.getTraditionalScammerMapping().fetchByPersonID(unbanRequest.bannedPersonID);
-		if(scammer != null) {
-			return handleUnbanOnListRequest(unbanRequest, moderator, banned, scammer);
-		}
+		verifyFormat(database, "unban_request_to_mod_denied_generic_body",
+				"The body of the pm to send to the person who sent us an unban request when we are denying them and we don't know "
+				+ "of any reason to trust them",
+				"mod", "The username of the person who made the request",
+				"banned", "The username of the person they tried to unban");
 		
-		Map<Integer, Boolean> knownModeratingSubreddits = new HashMap<>();
-		
-		BanHistory[] sourceHistory = new BanHistory[1];
-		HandledModAction[] sourceHMA = new HandledModAction[1];
-		if (!moderatorHasPermission(unbanRequest, moderator, banned, knownModeratingSubreddits,sourceHistory, sourceHMA)) {
-			return getNoPermissionResult(unbanRequest, moderator);
-		}
-		
-		List<MonitoredSubreddit> allSubs = database.getMonitoredSubredditMapping().fetchAll();
-		List<UserUnbanInformation> unbans = new ArrayList<>();
-		List<ModmailPMInformation> modmailPMs = new ArrayList<>();
-		List<UserPMInformation> userPMs = new ArrayList<>();
-		List<UserActionInfo> actions = new ArrayList<>();
+		verifyFormat(database, "unban_request_to_mod_denied_prevented_title",
+				"The title of the pm to send to the person who sent us an unban request when we are denying them but we can trust "
+				+ "them. The reason for denial is one or more conflicting bans.",
+				"mod", "The username of the person who made the request",
+				"banned", "The username of the person they tried to unban");
 
+		verifyFormat(database, "unban_request_to_mod_denied_prevented_body",
+				"The body of the pm to send to the person who sent us an unban request when we are denying them but we can trust "
+				+ "them. The reason for denial is one or more conflicting bans.",
+				"mod", "The username of the person who made the request",
+				"banned", "The username of the person they tried to unban",
+				"history table", "A markup formatted table for the full history of the banned user from the history markup formatter",
+				"authorize table", "A markup formatted table for what gave them authorization to make the request",
+				"prevent table", "A markup formatted table for what prevented the request");
 		
-		MonitoredSubreddit sourceSub = database.getMonitoredSubredditMapping().fetchByID(sourceHMA[0].monitoredSubredditID);
-		Person sourceModerator = database.getPersonMapping().fetchByID(sourceHistory[0].modPersonID);
-		for(MonitoredSubreddit sub : allSubs) {
-			determineActionOnSubreddit(unbanRequest, sub, moderator, banned, unbans, modmailPMs, userPMs, actions, knownModeratingSubreddits,
-					sourceHistory[0], sourceHMA[0], sourceSub, sourceModerator);
-		}
+		verifyFormat(database, "unban_request_to_mod_denied_unknown_title",
+				"The title of the pm to send to the person who sent us an unban request when we are denying them because we don't "
+				+ "know who they are talking about, but they are a moderator of the USL",
+				"mod", "The username of the person who made the request",
+				"banned", "The username of the person they tried to unban");
 		
-		addAuthorizedResponseToUnbanner(unbanRequest, allSubs, moderator, banned, unbans, modmailPMs, userPMs, actions, knownModeratingSubreddits,
-				sourceHistory[0], sourceHMA[0], sourceSub, sourceModerator);
+		verifyFormat(database, "unban_request_to_mod_denied_unknown_body",
+				"The body of the pm to send to the person who sent us an unban request when we are denying them because we don't "
+				+ "know who they are talking about, but they are a moderator of the USL",
+				"mod", "The username of the person who made the request",
+				"banned", "The username of the person they tried to unban");
 		
-		return new UnbanRequestResult(unbanRequest, unbans, modmailPMs, userPMs, null, false);
+		verifyFormat(database, "unban_request_to_mod_denied_no_tags_title",
+				"The title of the pm to send to the person who sent us an unban request when we are denying them because the "
+				+ "user they are talking about has no active tags, but they are a moderator of the USL",
+				"mod", "The username of the person who made the request",
+				"banned", "The username of the person they tried to unban");
+		
+		verifyFormat(database, "unban_request_to_mod_denied_no_tags_body",
+				"The body of the pm to send to the person who sent us an unban request when we are denying them because the "
+				+ "user they are talking about has no active tags, but they are a moderator of the USL",
+				"mod", "The username of the person who made the request",
+				"banned", "The username of the person they tried to unban",
+				"history table", "The full history of the banned person from the history markup formatter");
+		
+		verifyFormat(database, "unban_request_to_mod_approved_title",
+				"The title of the pm to send to the person who sent us an unban request when we are approving them.",
+				"mod", "The username of the person who made the request",
+				"banned", "The username of the person that will be unbanned");
+		
+		verifyFormat(database, "unban_request_to_mod_approved_body_no_footer",
+				"The body of the pm to send to the person who sent us an unban request when we are approving them. This will be appended by"
+				+ " other messages before the footer, as appropriate for the request made",
+				"mod", "The username of the person who made the request",
+				"banned", "The username of the person that will be unbanned",
+				"tags", "A comma-separated list of tags that were removed",
+				"history table", "The full history of the banned person from the history markup formatter");
+		
+		verifyFormat(database, "unban_request_to_mod_approved_tradscammer_append",
+				"The appended text to the body of the pm to the requester of an approved unban request when the person was removed from "
+				+ "the traditional scammer list",
+				"banned", "The username of the person that will be removed from the traditional list",
+				"reason", "The reason that was originally given",
+				"description", "The description that we were using for the traditional ban");
+		
+		verifyFormat(database, "unban_request_to_mod_approved_override_append",
+				"The appended text to the body of the pm to the requester of an approved unban request when the person who is performing "
+				+ "the unban is a usl moderator and they are overriding other peoples bans.",
+				"mod", "The username of the person who made the request",
+				"banned", "The username of the person that will be removed from the traditional list",
+				"override table", "A mark-up formatted table of the bans that are being overriden");
+		
+		verifyFormat(database, "unban_request_to_mod_approved_footer",
+				"The footer text for the bottom of the body of the pm to the requester of an approved unban request",
+				"mod", "The username of the person who made the request",
+				"banned", "The username of the person that will be removed from the traditional list");
+		
 	}
-
-	/**
-	 * Gets the result that should occur if moderator has no permission to do unbanRequest
-	 * 
-	 * @param unbanRequest the request
-	 * @param moderator the moderator with no permission
-	 * @return the appropriate result
-	 */
-	protected UnbanRequestResult getNoPermissionResult(UnbanRequest unbanRequest, Person moderator) {
-		ResponseInfo respInfo = new ResponseInfo(ResponseInfoFactory.base);
-		Response pmTitleResponse = database.getResponseMapping().fetchByName("unban_request_moderator_unauthorized_title");
-		Response pmBodyResponse = database.getResponseMapping().fetchByName("unban_request_moderator_unauthorized_body");
-		
-		String pmTitle = new ResponseFormatter(pmTitleResponse.responseBody, respInfo).getFormattedResponse(config, database);
-		String pmBody = new ResponseFormatter(pmBodyResponse.responseBody, respInfo).getFormattedResponse(config, database);
-		UserPMInformation pm = new UserPMInformation(moderator, pmTitle, pmBody);
-		
-		return new UnbanRequestResult(unbanRequest, new ArrayList<UserUnbanInformation>(), new ArrayList<ModmailPMInformation>(), Arrays.asList(pm), null, true);
-	}
-
-	/**
-	 * Handles an unban request that has a banned person that is on the traditional scammer list.
-	 * Instead of normal requirements, the moderator must be a moderator on config user.main_sub 
-	 * and the person will be unbanned on all subreddits he is banned on
-	 * 
-	 * @param unbanReq unban request
-	 * @param moderator moderator of unbanReq.moderatorPersonID
-	 * @param banned banned person of unbanReq.bannedPersonID
-	 * @param scammer scammer with id unbanReq.bannedPersonID
-	 * @return the actions to take
-	 */
-	protected UnbanRequestResult handleUnbanOnListRequest(UnbanRequest unbanReq, Person moderator, Person banned, TraditionalScammer scammer) {
-		List<UserUnbanInformation> unbans = new ArrayList<>();
-		List<ModmailPMInformation> modmailPMs = new ArrayList<>();
-		List<UserPMInformation> userPMs = new ArrayList<>();
-		
-		MonitoredSubreddit mainSub = database.getMonitoredSubredditMapping().fetchByName(config.getProperty("user.main_sub"));
-		if(!isModeratorFunction.isModerator(mainSub.subreddit, moderator.username)) {
-			return getNoPermissionResult(unbanReq, moderator);
-		}
-		ResponseInfo responseInfo = new ResponseInfo(ResponseInfoFactory.base);
-		responseInfo.addLongtermString("unban mod", moderator.username);
-		responseInfo.addLongtermString("unbanned user", banned.username);
-		responseInfo.addLongtermString("scammer reason", scammer.reason);
-		responseInfo.addLongtermString("scammer description", scammer.description);
-		
-		{
-			// nest so we can use these variable names later
-			
-			Response titleResponse = database.getResponseMapping().fetchByName("unban_request_removed_from_list_title");
-			Response bodyResponse = database.getResponseMapping().fetchByName("unban_request_removed_from_list_body");
-			
-			String titleString = new ResponseFormatter(titleResponse.responseBody, responseInfo).getFormattedResponse(config, database);
-			String bodyString = new ResponseFormatter(bodyResponse.responseBody, responseInfo).getFormattedResponse(config, database);
-			
-			modmailPMs.add(new ModmailPMInformation(mainSub, titleString, bodyString));
-			
-		}
-
-		List<UserActionInfo> actions = new ArrayList<>(); 
-		List<MonitoredSubreddit> allSubs = database.getMonitoredSubredditMapping().fetchAll();
-		for(MonitoredSubreddit sub : allSubs) {
-			if(!USLUtils.potentiallyBannedOnSubreddit(database, banned.id, sub)) {
-				actions.add(new UserActionInfo(sub.subreddit, "nothing (definitely not banned there)"));
-				continue; // it is impossible for him to be banned right now, don't unban
-			}
-			
-			String act = this.doUnbanActionForSubredditUsingResponseInfo(sub, responseInfo, unbans, modmailPMs, banned, "unban_request_valid_modmail_list");
-			
-			actions.add(new UserActionInfo(sub.subreddit, act));
-		}
-		
-		{
-			// We should tell the guy who requested it that we did stuff
-			
-			Response titleResponse = database.getResponseMapping().fetchByName("unban_request_removed_from_list_authorized_title");
-			Response bodyResponse = database.getResponseMapping().fetchByName("unban_request_removed_from_list_authorized_body");
-			
-			ResponseInfo oResponseInfo = new ResponseInfo(responseInfo);
-			
-			String actTable = "Subreddit|Action\n:--|:--";
-			
-			for(UserActionInfo act : actions) {
-				actTable += "\n" + act.subreddit + "|" + act.action;
-			}
-			
-			oResponseInfo.addLongtermString("actions table", actTable);
-			
-			String titleString = new ResponseFormatter(titleResponse.responseBody, oResponseInfo).getFormattedResponse(config, database);
-			String bodyString = new ResponseFormatter(bodyResponse.responseBody, oResponseInfo).getFormattedResponse(config, database);
-			
-			userPMs.add(new UserPMInformation(moderator, titleString, bodyString));
-		}
-		
-		return new UnbanRequestResult(unbanReq, unbans, modmailPMs, userPMs, scammer, false);
-	}
-
-	/**
-	 * Determine if a moderator has permission to make the specified unban request. The moderator
-	 * must either be a moderator of the subreddit that performed the original ban, or must be
-	 * a moderator of the universalscammerlist.
-	 * 
-	 * @param unbanRequest the request made
-	 * @param moderator the moderator
-	 * @param banned the banned person
-	 * @param knownModeratingSubreddits subreddits to if moderator moderates it
-	 * @param outSourceHistory array of length 1 that is set with the source history if mod has perm
-	 * @param outSourceHMA array of length 1 that is set with the source hma if mod has perm
-	 * @return if the moderator can request banned be unbanned
-	 */
-	protected boolean moderatorHasPermission(UnbanRequest unbanRequest, Person moderator, Person banned, Map<Integer, Boolean> knownModeratingSubreddits,
-			BanHistory[] outSourceHistory, HandledModAction[] outSourceHMA) {
-		boolean forcedToSucceed = false;
-		MonitoredSubreddit primSub = database.getMonitoredSubredditMapping().fetchByName(config.getProperty("user.main_sub"));
-		if(primSub != null) {
-			if(!knownModeratingSubreddits.containsKey(primSub.id))
-			{
-				knownModeratingSubreddits.put(primSub.id, isModeratorFunction.isModerator(primSub.subreddit, moderator.username));
-			}
-			
-			forcedToSucceed = knownModeratingSubreddits.get(primSub.id);
-		}
-		
-		List<BanHistory> historyOfBanned = database.getBanHistoryMapping().fetchBanHistoriesByPerson(banned.id);
-		List<Person> ignorePersons = Arrays.asList(
-				database.getPersonMapping().fetchOrCreateByUsername(config.getProperty("user.username")),
-				database.getPersonMapping().fetchOrCreateByUsername("Guzbot3000")
-				);
-		
-		
-		BanHistory valid = null;
-		HandledModAction validHMA = null;
-		for(BanHistory history : historyOfBanned) {
-			if(ignorePersons.stream().anyMatch((p) -> p.id == history.modPersonID))
-				continue;
-			
-			HandledModAction hma = database.getHandledModActionMapping().fetchByID(history.handledModActionID);
-			
-			if(!forcedToSucceed) {
-				if(!knownModeratingSubreddits.containsKey(hma.monitoredSubredditID)) {
-					MonitoredSubreddit monSub = database.getMonitoredSubredditMapping().fetchByID(hma.monitoredSubredditID);
 	
-					knownModeratingSubreddits.put(hma.monitoredSubredditID, isModeratorFunction.isModerator(monSub.subreddit, moderator.username));
+	protected boolean isMod(String sub) {
+		if(modCache.containsKey(sub))
+			return modCache.get(sub).booleanValue();
+		
+		boolean res = isModerator.isModerator(sub, currentMod.username);
+		modCache.put(sub, res);
+		return res;
+	}
+	
+	public UnbanRequestResult handleUnbanRequest(UnbanRequest request) {
+		currentMod = database.getPersonMapping().fetchByID(request.modPersonID);
+		UnbanRequestResult res = handleUnbanRequestReal(request);
+		modCache.clear();
+		currentMod = null;
+		return res;
+	}
+	
+	protected UnbanRequestResult handleUnbanRequestReal(UnbanRequest request) {
+		boolean isModOfPrim = isMod(config.getProperty("user.main_sub"));
+		
+		if(isModOfPrim) {
+			TraditionalScammer trad = database.getTraditionalScammerMapping().fetchByPersonID(request.bannedPersonID);
+			if(trad != null) {
+				return authorizeRequest(request);
+			}
+		}
+		
+		USLAction action = database.getUSLActionMapping().fetchLatest(request.bannedPersonID);
+		if(action == null) {
+			if(isModOfPrim)
+				return sendNoKnownPersonMessage(request);
+			return sendGenericNotAuthorized(request);
+		}
+		
+		if(!isModOfPrim) {
+			Person bot = database.getPersonMapping().fetchByUsername(config.getProperty("user.username"));
+	
+			List<USLActionBanHistory> attachedBans = database.getUSLActionBanHistoryMapping().fetchByUSLActionID(action.id);
+			List<USLActionHashtag> attachedTags = database.getUSLActionHashtagMapping().fetchByUSLActionID(action.id);
+			
+			List<HandledModActionJoinHistory> authorizingBans = new ArrayList<>();
+			List<HandledModActionJoinHistory> preventingBans = new ArrayList<>();
+			for(USLActionBanHistory attachedBan : attachedBans) {
+				BanHistory ban = database.getBanHistoryMapping().fetchByID(attachedBan.banHistoryID);
+				if(ban.modPersonID != bot.id) {
+					HandledModAction hma = database.getHandledModActionMapping().fetchByID(ban.handledModActionID);
+					MonitoredSubreddit sub = database.getMonitoredSubredditMapping().fetchByID(hma.monitoredSubredditID);
+					
+					if(!sub.readOnly) {
+						List<SubscribedHashtag> subscribed = database.getSubscribedHashtagMapping().fetchForSubreddit(sub.id, false);
+						List<Hashtag> tags = database.getHashtagMapping().fetchForSubscribed(subscribed);
+						
+						String descLower = ban.banDescription.toLowerCase();
+						boolean foundTag = false;
+						for(Hashtag tag : tags) {
+							if(attachedTags.stream().anyMatch((a) -> a.hashtagID == tag.id) && descLower.contains(tag.tag.toLowerCase())) {
+								foundTag = true;
+								break;
+							}
+						}
+						
+						if(foundTag) {
+							if(isMod(sub.subreddit)) {
+								authorizingBans.add(new HandledModActionJoinHistory(hma, ban, null));
+							}else {
+								preventingBans.add(new HandledModActionJoinHistory(hma, ban, null));
+							}
+						}
+					}
 				}
-				
-				boolean isMod = knownModeratingSubreddits.get(hma.monitoredSubredditID);
-				
-				if(!isMod)
-					continue;
-				
-				if(valid != null && hma.occurredAt.before(validHMA.occurredAt))
-					continue;
 			}
 			
-			valid = history;
-			validHMA = hma;
+			if(authorizingBans.isEmpty()) 
+				return sendGenericNotAuthorized(request);
+			
+			if(!preventingBans.isEmpty())
+				return sendBanPrevented(request, authorizingBans, preventingBans);
+			
+			return authorizeRequest(request);
 		}
 		
+		List<USLActionHashtag> tags = database.getUSLActionHashtagMapping().fetchByUSLActionID(action.id);
+		if(tags == null)
+			return sendNoTagsMessage(request);
 		
-		if(valid == null)
-			return false; // even when you are forced to succeed you can't unban someone we dont know about
-		
-		// Check for the following situation:
-		// paul bans eric on paulssub
-		// me bans eric on emmassub
-		// emma unbans eric on emmassub
-		// emma bans eric on emmassub
-		// emma requests to unban eric
-		
-		// This might block some peculiar legitamate requests, but lets assume a system
-		// administrator can deal with those
-		
-		if(!forcedToSucceed) {
-			List<BanHistory> historyOnSubreddit = database.getBanHistoryMapping().fetchBanHistoriesByPersonAndSubreddit(banned.id, validHMA.monitoredSubredditID);
-			if(historyOnSubreddit.stream().anyMatch((h) -> ignorePersons.stream().anyMatch((p) -> p.id == h.modPersonID))) {
-				return false;
-			}
-		}
-		
-		outSourceHistory[0] = valid;
-		outSourceHMA[0] = validHMA;
-		return true;
+		return authorizeRequest(request);
 	}
 
-	
-	/**
-	 * Determine what actions need to be taken as a result of the specified unban request on the
-	 * specified subreddit. Also given some of the results from the database to avoid repeating the
-	 * same work over and over
-	 * 
-	 * @param unbanRequest the unban request
-	 * @param sub the subreddit to consider
-	 * @param moderator the moderator requesting the unban
-	 * @param banned the person requested to be unbanned
-	 * @param unbans the list of unbans to do, should be modified
-	 * @param modmailPMs the list of modmail pms to do, should be modified
-	 * @param userPMs the list of user pms to do, should be modified
-	 * @param actions the list of what we did, should be modified to include what we did for this sub
-	 * @param knownModeratingSubreddits  sub id to if moderator moderates it
-	 * @param sourceHistory the history that moderator is using to be allowed to unban
-	 * @param sourceHMA the handled mod action for sourceHistory
-	 * @param sourceSub the monitored subreddit of sourceHMA
-	 * @param sourceModerator the moderator in sourceHistory
-	 */
-	protected void determineActionOnSubreddit(UnbanRequest unbanRequest, MonitoredSubreddit sub, Person moderator,
-			Person banned, List<UserUnbanInformation> unbans, List<ModmailPMInformation> modmailPMs,
-			List<UserPMInformation> userPMs, List<UserActionInfo> actions, Map<Integer, Boolean> knownModeratingSubreddits,
-			BanHistory sourceHistory, HandledModAction sourceHMA, MonitoredSubreddit sourceSub,
-			Person sourceModerator) {
+	private UnbanRequestResult authorizeRequest(UnbanRequest request) {
+		String titleFormat = database.getResponseMapping().fetchByName("unban_request_to_mod_approved_title").responseBody;
+		String bodyFormat = database.getResponseMapping().fetchByName("unban_request_to_mod_approved_body_no_footer").responseBody;
 		
-		BanHistory mostRecentBan = database.getBanHistoryMapping().fetchBanHistoryByPersonAndSubreddit(banned.id, sub.id);
-		UnbanHistory mostRecentUnban = database.getUnbanHistoryMapping().fetchUnbanHistoryByPersonAndSubreddit(banned.id, sub.id);
-		if(mostRecentBan == null && mostRecentUnban != null) {
-			actions.add(new UserActionInfo(sub.subreddit, "Did not unban because was not banned (unpaired unban)"));
-			return;
-		}
+		Person mod = database.getPersonMapping().fetchByID(request.modPersonID);
+		Person banned = database.getPersonMapping().fetchByID(request.bannedPersonID);
+		String historyTable = USLHistoryMarkupFormatter.format(database, config, banned.id, true);
+
+		USLAction action = database.getUSLActionMapping().fetchLatest(request.bannedPersonID);
+		TraditionalScammer traditional = database.getTraditionalScammerMapping().fetchByPersonID(request.bannedPersonID);
 		
-		if(mostRecentBan != null && mostRecentUnban != null) {
-			HandledModAction mostRecentBanHMA = database.getHandledModActionMapping().fetchByID(mostRecentBan.handledModActionID);
-			HandledModAction mostRecentUnbanHMA = database.getHandledModActionMapping().fetchByID(mostRecentUnban.handledModActionID);
+		List<Hashtag> matching = new ArrayList<>();
+		if(action != null) {
+			List<USLActionHashtag> attachedTags = database.getUSLActionHashtagMapping().fetchByUSLActionID(action.id);
 			
-			if(mostRecentUnbanHMA.occurredAt.after(mostRecentBanHMA.occurredAt)) {
-				Person mostRecentBanMod = database.getPersonMapping().fetchByID(mostRecentBan.modPersonID);
-				Person mostRecentUnbanMod = database.getPersonMapping().fetchByID(mostRecentUnban.modPersonID);
-				actions.add(new UserActionInfo(sub.subreddit, "Did not unban because the original ban by " + mostRecentBanMod.username + " was unbanned already by " + mostRecentUnbanMod.username));
-				return;
+			for(int i = 0; i < attachedTags.size(); i++) {
+				Hashtag tag = database.getHashtagMapping().fetchByID(attachedTags.get(i).hashtagID);
+				matching.add(tag);
+				
+			}
+		}else if(traditional != null) {
+			List<Hashtag> allTags = database.getHashtagMapping().fetchAll();
+			String descLower = traditional.description.toLowerCase();
+			for(Hashtag tag : allTags) {
+				if(descLower.contains(tag.tag.toLowerCase())) {
+					matching.add(tag);
+				}
 			}
 		}
-		
-		ResponseInfo modmailInfo = new ResponseInfo(ResponseInfoFactory.base);
-		modmailInfo.addLongtermString("unban mod", moderator.username);
-		modmailInfo.addLongtermString("unbanned user", banned.username);
-		modmailInfo.addLongtermString("original ban subreddit", sourceSub.subreddit);
-		modmailInfo.addLongtermString("original ban mod", sourceModerator.username);
-		modmailInfo.addLongtermString("original description", sourceHistory.banDescription);
-		
-		String whatActuallyDo = doUnbanActionForSubredditUsingResponseInfo(sub, modmailInfo, unbans, modmailPMs, banned, "unban_request_valid_modmail");
-		
-		if(mostRecentBan != null) {
-			HandledModAction mostRecentBanHMA = database.getHandledModActionMapping().fetchByID(mostRecentBan.handledModActionID);
-			Person mostRecentBanMod = database.getPersonMapping().fetchByID(mostRecentBan.modPersonID);
-			String prettyMostRecentBanTime = SimpleDateFormat.getInstance().format(mostRecentBanHMA.occurredAt);
-			actions.add(new UserActionInfo(sub.subreddit, 
-					"Want to unban the ban by " + mostRecentBanMod.username + " at " + prettyMostRecentBanTime 
-					+ " with description \"" + mostRecentBan.banDescription + "\" and details \"" + mostRecentBan.banDetails
-					+ "\". What I will do: " + whatActuallyDo));
-		}else {
-			actions.add(new UserActionInfo(sub.subreddit, 
-					"Wanted to unban in case banned prior to our history. What I will do: " + whatActuallyDo));
-		}
-	}
-	
-	protected String doUnbanActionForSubredditUsingResponseInfo(MonitoredSubreddit sub, ResponseInfo modmailInfo, 
-			List<UserUnbanInformation> unbans, List<ModmailPMInformation> modmailPMs, Person banned,
-			String responsePrefix) {
-		if(!sub.writeOnly) {
-			Response titleResponse = database.getResponseMapping().fetchByName(responsePrefix + "_title");
-			Response bodyResponse = database.getResponseMapping().fetchByName(responsePrefix + "_body");
-			String titleString = new ResponseFormatter(titleResponse.responseBody, modmailInfo).getFormattedResponse(config, database);
-			String bodyString = new ResponseFormatter(bodyResponse.responseBody, modmailInfo).getFormattedResponse(config, database);
-			
-			unbans.add(new UserUnbanInformation(banned, sub));
-			modmailPMs.add(new ModmailPMInformation(sub, titleString, bodyString));
-			return "sent a message and unbanned";
-		}else {
-			Response titleResponse = database.getResponseMapping().fetchByName(responsePrefix + "_writeonly_title");
-			Response bodyResponse = database.getResponseMapping().fetchByName(responsePrefix + "_writeonly_body");
-			String titleString = new ResponseFormatter(titleResponse.responseBody, modmailInfo).getFormattedResponse(config, database);
-			String bodyString = new ResponseFormatter(bodyResponse.responseBody, modmailInfo).getFormattedResponse(config, database);
 
-			modmailPMs.add(new ModmailPMInformation(sub, titleString, bodyString));
-			return "did not unban, but did send them a message (they are write only)";
-		}
-	}
-	
-	protected void addAuthorizedResponseToUnbanner(UnbanRequest unbanRequest, List<MonitoredSubreddit> allSubs, Person moderator,
-			Person banned, List<UserUnbanInformation> unbans, List<ModmailPMInformation> modmailPMs,
-			List<UserPMInformation> userPMs, List<UserActionInfo> actions, Map<Integer, Boolean> knownModeratingSubreddits,
-			BanHistory sourceHistory, HandledModAction sourceHMA, MonitoredSubreddit sourceSub,
-			Person sourceModerator) {
-		Response authorizedTitle = database.getResponseMapping().fetchByName("unban_request_moderator_authorized_title");
-		Response authorizedBody = database.getResponseMapping().fetchByName("unban_request_moderator_authorized_body");
-		
-		String reasonsTable = "Subreddit|Intended Action and Reason\n:--|:--";
-		for(UserActionInfo action : actions) {
-			reasonsTable += "\n" + action.subreddit + "|" + action.action;
-		}
-		
-		String actionsTable = "Subreddit|Current Ban Status|Action Taken\n:--|:--|:--";
-		for(MonitoredSubreddit sub : allSubs) {
-			BanHistory mostRecentBan = database.getBanHistoryMapping().fetchBanHistoryByPersonAndSubreddit(banned.id, sub.id);
-			UnbanHistory mostRecentUnban = database.getUnbanHistoryMapping().fetchUnbanHistoryByPersonAndSubreddit(banned.id, sub.id);
+		String tagsString = "none found";
+		for(int i = 0; i < matching.size(); i++) {
+			Hashtag tag = matching.get(i);
 			
-			String currentStatus;
-			if(mostRecentBan == null && mostRecentUnban != null) {
-				currentStatus = "Not banned (unpaired unban)";
-			}else if(mostRecentBan == null && mostRecentUnban == null) {
-				currentStatus = "Potentially banned a long time ago (no history)";
-			}else if(mostRecentBan != null && mostRecentUnban == null) {
-				Person originalBanner = database.getPersonMapping().fetchByID(mostRecentBan.modPersonID);
-				currentStatus = "Banned for " + mostRecentBan.banDetails + " by " + originalBanner.username + " with reason \"" + mostRecentBan.banDescription + "\"";
-			}else {
-				HandledModAction mostRecentBanHMA = database.getHandledModActionMapping().fetchByID(mostRecentBan.handledModActionID);
-				HandledModAction mostRecentUnbanHMA = database.getHandledModActionMapping().fetchByID(mostRecentUnban.handledModActionID);
-				
-				if(mostRecentBanHMA.occurredAt.before(mostRecentUnbanHMA.occurredAt)) {
-					currentStatus = "Not banned (paired ban/unban)";
+			if(i == 0) {
+				tagsString = tag.tag;
+			}else if(i == matching.size() - 1) {
+				if(i == 1) {
+					tagsString += " and " + tag.tag;
 				}else {
-					Person originalBanner = database.getPersonMapping().fetchByID(mostRecentBan.modPersonID);
-					currentStatus = "Banned for " + mostRecentBan.banDetails + " by " + originalBanner.username + " with reason \"" + mostRecentBan.banDescription + "\"";
+					tagsString += ", and " + tag.tag;
 				}
-			}
-			
-			boolean sentMessage = modmailPMs.stream().anyMatch((pm) -> pm.subreddit.id == sub.id);
-			boolean unban = unbans.stream().anyMatch((ub) -> ub.subreddit.id == sub.id);
-			
-			String actionTaken;
-			if(sentMessage && unban) {
-				actionTaken = "Sent message and unbanned";
-			}else if(sentMessage) {
-				actionTaken = "Sent message";
-			}else if(unban) {
-				actionTaken = "Unbanned";
 			}else {
-				actionTaken = "Do nothing";
+				tagsString += ", " + tag.tag;
 			}
-			
-			actionsTable += "\n" + sub.subreddit + "|" + currentStatus + "|" + actionTaken;
 		}
 		
 		ResponseInfo respInfo = new ResponseInfo(ResponseInfoFactory.base);
-		respInfo.addLongtermString("unban mod", moderator.username);
-		respInfo.addLongtermString("unbanned user", banned.username);
-		respInfo.addLongtermString("original ban subreddit", sourceSub.subreddit);
-		respInfo.addLongtermString("original ban mod", sourceModerator.username);
-		respInfo.addLongtermString("original description", sourceHistory.banDescription);
-		respInfo.addLongtermString("original details", sourceHistory.banDetails);
-		respInfo.addLongtermString("original ban date", SimpleDateFormat.getDateTimeInstance().format(sourceHMA.occurredAt));
-		respInfo.addLongtermString("reasons table", reasonsTable);
-		respInfo.addLongtermString("actions table", actionsTable);
+		respInfo.addLongtermString("mod", mod.username);
+		respInfo.addLongtermString("banned", banned.username);
+		respInfo.addTemporaryString("history table", historyTable);
+		respInfo.addTemporaryString("tags", tagsString);
 		
-		String titleString = new ResponseFormatter(authorizedTitle.responseBody, respInfo).getFormattedResponse(config, database);
-		String bodyString = new ResponseFormatter(authorizedBody.responseBody, respInfo).getFormattedResponse(config, database);
+		StringBuilder body = new StringBuilder(new ResponseFormatter(bodyFormat, respInfo).getFormattedResponse(config, database));
+		respInfo.clearTemporary();
+		String title = new ResponseFormatter(titleFormat, respInfo).getFormattedResponse(config, database);
 		
-		userPMs.add(new UserPMInformation(moderator, titleString, bodyString));
+		if(traditional != null) {
+			String appendFormat = database.getResponseMapping().fetchByName("unban_request_to_mod_approved_tradscammer_append").responseBody;
+			
+			respInfo.addTemporaryString("reason", traditional.reason);
+			respInfo.addTemporaryString("description", traditional.description);
+			
+			String append = new ResponseFormatter(appendFormat, respInfo).getFormattedResponse(config, database);
+			body.append(append);
+			
+			respInfo.clearTemporary();
+		}
+		
+		if(action != null) {
+			Person bot = database.getPersonMapping().fetchByUsername(config.getProperty("user.username"));
+			
+			List<HandledModActionJoinHistory> overridenBans = new ArrayList<>();
+			List<USLActionBanHistory> attachedBans = database.getUSLActionBanHistoryMapping().fetchByUSLActionID(action.id);
+			
+			for(USLActionBanHistory attached : attachedBans) {
+				BanHistory ban = database.getBanHistoryMapping().fetchByID(attached.banHistoryID);
+				
+				if(ban.modPersonID != bot.id) { 
+					HandledModAction hma = database.getHandledModActionMapping().fetchByID(ban.handledModActionID);
+					
+					MonitoredSubreddit sub = database.getMonitoredSubredditMapping().fetchByID(hma.monitoredSubredditID);
+					if(!isMod(sub.subreddit)) {
+						List<SubscribedHashtag> tagsForSub = database.getSubscribedHashtagMapping().fetchForSubreddit(sub.id, false);
+						List<Hashtag> tags = database.getHashtagMapping().fetchForSubscribed(tagsForSub);
+						
+						String descLower = ban.banDescription.toLowerCase();
+						for(Hashtag tg : tags) {
+							if(descLower.contains(tg.tag.toLowerCase())) {
+								overridenBans.add(new HandledModActionJoinHistory(hma, ban, null));
+								break;
+							}
+						}
+					}
+				}
+			}
+			
+			if(!overridenBans.isEmpty()) {
+				String appendFormat = database.getResponseMapping().fetchByName("unban_request_to_mod_approved_override_append").responseBody;
+				
+				DateFormat formatter = SimpleDateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
+				StringBuilder overrideTable = new StringBuilder("Time|Subreddit|Moderator|Ban Note\n:--|:--|:--|:--\n");
+				for(HandledModActionJoinHistory overrideBan : overridenBans) {
+					sendBanPreventedHelper_FormatBanRow(formatter, overrideTable, overrideBan);
+				}
+				
+				respInfo.addTemporaryString("override table", overrideTable.toString());
+				String append = new ResponseFormatter(appendFormat, respInfo).getFormattedResponse(config, database);
+				
+				body.append(append);
+				
+				respInfo.clearTemporary();
+			}
+		}
+		
+		String footerFormat = database.getResponseMapping().fetchByName("unban_request_to_mod_approved_footer").responseBody;
+		
+		String footer = new ResponseFormatter(footerFormat, respInfo).getFormattedResponse(config, database);
+		body.append(footer);
+		
+		return new UnbanRequestResult(request, Collections.emptyList(), 
+				Collections.singletonList(new UserPMInformation(mod, title, body.toString())),
+				traditional, false);
+	}
+
+	private void sendBanPreventedHelper_FormatBanRow(DateFormat formatter, StringBuilder table, HandledModActionJoinHistory ban) {
+		table.append(formatter.format(ban.handledModAction.occurredAt));
+		table.append('|');
+		
+		MonitoredSubreddit sub = database.getMonitoredSubredditMapping().fetchByID(ban.handledModAction.monitoredSubredditID);
+		table.append("/r/");
+		table.append(sub.subreddit);
+		table.append('|');
+		
+		Person authMod = database.getPersonMapping().fetchByID(ban.banHistory.modPersonID);
+		table.append("/u/");
+		table.append(authMod.username);
+		table.append('|');
+		
+		table.append(ban.banHistory.banDescription);
+		table.append('\n');
+	}
+	
+	private UnbanRequestResult sendBanPrevented(UnbanRequest request, List<HandledModActionJoinHistory> authorizingBans,
+			List<HandledModActionJoinHistory> preventingBans) {
+		String titleFormat = database.getResponseMapping().fetchByName("unban_request_to_mod_denied_prevented_title").responseBody;
+		String bodyFormat = database.getResponseMapping().fetchByName("unban_request_to_mod_denied_prevented_body").responseBody;
+		
+		Person mod = database.getPersonMapping().fetchByID(request.modPersonID);
+		Person banned = database.getPersonMapping().fetchByID(request.bannedPersonID);
+		String historyTable = USLHistoryMarkupFormatter.format(database, config, banned.id, true);
+		
+		DateFormat formatter = SimpleDateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
+		StringBuilder authorizeTable = new StringBuilder("Time|Subreddit|Moderator|Ban Note\n:--|:--|:--|:--\n");
+		for(HandledModActionJoinHistory authBan : authorizingBans) {
+			sendBanPreventedHelper_FormatBanRow(formatter, authorizeTable, authBan);
+		}
+		
+		StringBuilder preventionTable = new StringBuilder("Time|Subreddit|Moderator|Ban Note\n:--|:--|:--|:--\n");
+		for(HandledModActionJoinHistory prevBan : preventingBans) {
+			sendBanPreventedHelper_FormatBanRow(formatter, preventionTable, prevBan);
+		}
+		
+		ResponseInfo respInfo = new ResponseInfo(ResponseInfoFactory.base);
+		respInfo.addLongtermString("mod", mod.username);
+		respInfo.addLongtermString("banned", banned.username);
+		respInfo.addTemporaryString("history table", historyTable);
+		respInfo.addTemporaryString("prevent table", preventionTable.toString());
+		respInfo.addTemporaryString("authorize table", authorizeTable.toString());
+		
+		String body = new ResponseFormatter(bodyFormat, respInfo).getFormattedResponse(config, database);
+		respInfo.clearTemporary();
+		String title = new ResponseFormatter(titleFormat, respInfo).getFormattedResponse(config, database);
+		
+		return new UnbanRequestResult(request, Collections.emptyList(), 
+				Collections.singletonList(new UserPMInformation(mod, title, body)),
+				null, true);
+	}
+
+	private UnbanRequestResult sendGenericNotAuthorized(UnbanRequest request) {
+		String titleFormat = database.getResponseMapping().fetchByName("unban_request_to_mod_denied_generic_title").responseBody;
+		String bodyFormat = database.getResponseMapping().fetchByName("unban_request_to_mod_denied_generic_body").responseBody;
+		
+		Person mod = database.getPersonMapping().fetchByID(request.modPersonID);
+		Person banned = database.getPersonMapping().fetchByID(request.bannedPersonID);
+		
+		ResponseInfo respInfo = new ResponseInfo(ResponseInfoFactory.base);
+		respInfo.addLongtermString("mod", mod.username);
+		respInfo.addLongtermString("banned", banned.username);
+
+		String body = new ResponseFormatter(bodyFormat, respInfo).getFormattedResponse(config, database);
+		String title = new ResponseFormatter(titleFormat, respInfo).getFormattedResponse(config, database);
+		
+		return new UnbanRequestResult(request, Collections.emptyList(), 
+				Collections.singletonList(new UserPMInformation(mod, title, body)),
+				null, true);
+	}
+
+	private UnbanRequestResult sendNoTagsMessage(UnbanRequest request) {
+		String titleFormat = database.getResponseMapping().fetchByName("unban_request_to_mod_denied_no_tags_title").responseBody;
+		String bodyFormat = database.getResponseMapping().fetchByName("unban_request_to_mod_denied_no_tags_body").responseBody;
+		
+		Person mod = database.getPersonMapping().fetchByID(request.modPersonID);
+		Person banned = database.getPersonMapping().fetchByID(request.bannedPersonID);
+		
+		ResponseInfo respInfo = new ResponseInfo(ResponseInfoFactory.base);
+		respInfo.addLongtermString("mod", mod.username);
+		respInfo.addLongtermString("banned", banned.username);
+		respInfo.addTemporaryString("history table", USLHistoryMarkupFormatter.format(database, config, banned.id, true));
+		
+		String body = new ResponseFormatter(bodyFormat, respInfo).getFormattedResponse(config, database);
+		respInfo.clearTemporary();
+		String title = new ResponseFormatter(titleFormat, respInfo).getFormattedResponse(config, database);
+		
+		return new UnbanRequestResult(request, Collections.emptyList(), 
+				Collections.singletonList(new UserPMInformation(mod, title, body)),
+				null, true);
+	}
+
+	private UnbanRequestResult sendNoKnownPersonMessage(UnbanRequest request) {
+		String titleFormat = database.getResponseMapping().fetchByName("unban_request_to_mod_denied_unknown_title").responseBody;
+		String bodyFormat = database.getResponseMapping().fetchByName("unban_request_to_mod_denied_unknown_body").responseBody;
+		
+		Person mod = database.getPersonMapping().fetchByID(request.modPersonID);
+		Person banned = database.getPersonMapping().fetchByID(request.bannedPersonID);
+		
+		ResponseInfo respInfo = new ResponseInfo(ResponseInfoFactory.base);
+		respInfo.addLongtermString("mod", mod.username);
+		respInfo.addLongtermString("banned", banned.username);
+
+		String body = new ResponseFormatter(bodyFormat, respInfo).getFormattedResponse(config, database);
+		String title = new ResponseFormatter(titleFormat, respInfo).getFormattedResponse(config, database);
+		
+		return new UnbanRequestResult(request, Collections.emptyList(), 
+				Collections.singletonList(new UserPMInformation(mod, title, body)),
+				null, true);
 	}
 }

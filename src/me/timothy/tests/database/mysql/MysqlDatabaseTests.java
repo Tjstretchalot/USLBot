@@ -27,7 +27,14 @@ import org.junit.runners.Suite.SuiteClasses;
 			MysqlActionLogMappingTest.class,
 			MysqlTemporaryAuthLevelMappingTest.class,
 			MysqlTemporaryAuthRequestMappingTest.class,
-			MysqlAcceptModeratorInviteRequestMappingTest.class
+			MysqlAcceptModeratorInviteRequestMappingTest.class,
+			MysqlHashtagMappingTest.class,
+			MysqlUSLActionMappingTest.class,
+			MysqlUSLActionBanHistoryMappingTest.class,
+			MysqlUSLActionHashtagMappingTest.class,
+			MysqlUSLActionUnbanHistoryMappingTest.class,
+			MysqlDirtyPersonMappingTest.class,
+			MysqlRedditToMeaningProgressMappingTest.class
 		})
 public class MysqlDatabaseTests {
 

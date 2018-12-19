@@ -1,14 +1,20 @@
 package me.timothy.tests.database.mysql;
 
+import static org.junit.Assert.assertEquals;
+
+import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import org.junit.Assert;
 
@@ -55,6 +61,7 @@ public class MysqlTestUtils {
 		String username = properties.getProperty("username");
 		String password = properties.getProperty("password");
 		String url = properties.getProperty("url");
+		String flatFolder = properties.getProperty("flat_folder");
 		
 		if(username == null || password == null || url == null) {
 			throw new IllegalArgumentException("username and password and url cannot be null");
@@ -64,9 +71,13 @@ public class MysqlTestUtils {
 			throw new IllegalArgumentException("url does not contain \"test\"");
 		}
 		
+		if(!flatFolder.contains("test")) {
+			throw new IllegalArgumentException("flat_folder does not contain \"test\"");
+		}
+		
 		USLDatabase db = new USLDatabase();
 		try {
-			db.connect(username, password, url);
+			db.connect(username, password, url, new File(flatFolder));
 		} catch (SQLException e) {
 			throw new RuntimeException(e);
 		}
@@ -79,9 +90,13 @@ public class MysqlTestUtils {
 	 * @param database the database to clear
 	 */
 	public static void clearDatabase(USLDatabase database) {
+		database.truncateMySQL();
+		database.purgeCustom();
+		/*
 		database.purgeAll();
 		database.validateTableState();
 		database.validateTableState(); // doing this twice is like a test of its own
+		*/
 	}
 	
 	/**
@@ -146,6 +161,91 @@ public class MysqlTestUtils {
 		}
 		
 		Assert.assertEquals(msg, objs.length, list.size());
+	}
+	
+	/**
+	 * Ensure that every predicate is met by at least one item in the list, not repeating
+	 * items (one item cannot satisfy multiple predicates), and that there are no extra
+	 * items.
+	 * 
+	 * @param list the list that you want to verify
+	 * @param preds the things you want to verify are in the list
+	 */
+	@SafeVarargs
+	public static <A> void assertListContentsPreds(List<A> list, Predicate<A>... preds) {
+		assertListContentsPreds("", list, preds);
+	}
+	
+	/**
+	 * Ensure that every predicate is met by at least one item in the list, not repeating
+	 * items (one item cannot satisfy multiple predicates), and that there are no extra
+	 * items.
+	 * 
+	 * @param msg the message to print upon failure
+	 * @param list the list
+	 * @param preds the predicates to match
+	 */
+	@SafeVarargs
+	public static <A> void assertListContentsPreds(String msg, List<A> list, Predicate<A>... preds) {
+		List<Integer> remainingInds = new ArrayList<>(preds.length);
+		for(int i = 0; i < preds.length; i++) {
+			remainingInds.add(i);
+		}
+		
+		for(int i = 0; i < list.size(); i++) {
+			A a = list.get(i);
+			boolean found = false;
+			for(int j = 0; j < remainingInds.size(); j++) {
+				if(preds[remainingInds.get(j)].test(a)) {
+					remainingInds.remove(j);
+					found = true;
+					break;
+				}
+			}
+			if(!found) {
+				throw new AssertionError(list.stream().map((e) -> e.toString()).collect(Collectors.joining(", ")) + "; no matching pred for index=" + i);
+			}
+		}
+		
+		if(remainingInds.size() != 0) {
+			throw new AssertionError(list.stream().map((e) -> e.toString()).collect(Collectors.joining(", ")) + "; no item matches predicates " + remainingInds.toString());
+		}
+	}
+	
+	/**
+	 * Assert list contents without a message and return the list ordered in the same order as the predicates.
+	 * 
+	 * @param list the list
+	 * @param preds the predicates
+	 * @return a new list with the same items as list but ordered to match preds
+	 */
+	@SafeVarargs
+	public static <A> List<A> orderToMatchPreds(List<A> list, Predicate<A>... preds) {
+		List<Integer> remainingInds = new ArrayList<>(preds.length);
+		for(int i = 0; i < preds.length; i++) {
+			remainingInds.add(i);
+		}
+		
+		List<A> newList = new ArrayList<>();
+		for(int i = 0; i < list.size(); i++) {
+			A a = list.get(i);
+			boolean found = false;
+			for(int j = 0; j < remainingInds.size(); j++) {
+				if(preds[remainingInds.get(j)].test(a)) {
+					remainingInds.remove(j);
+					newList.add(a);
+					found = true;
+					break;
+				}
+			}
+			
+			if(!found) {
+				throw new AssertionError(list.stream().map((e) -> e.toString()).collect(Collectors.joining(", ")) + "; no matching pred for index=" + i);
+			}
+		}
+		
+		assertEquals(" no item matches predicates " + remainingInds.toString(), 0, remainingInds.size());
+		return newList;
 	}
 	
 	/**

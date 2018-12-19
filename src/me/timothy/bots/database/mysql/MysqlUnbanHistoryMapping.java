@@ -144,6 +144,36 @@ public class MysqlUnbanHistoryMapping extends MysqlObjectWithIDMapping<UnbanHist
 	}
 
 	@Override
+	public UnbanHistory fetchByActionAndSubreddit(int uslActionId, int subredditId) {
+		try(PreparedStatement statement = connection.prepareStatement(
+				"SELECT unban_histories.id, unban_histories.mod_person_id, unban_histories.unbanned_person_id, unban_histories.handled_modaction_id FROM "
+				+ "usl_action_unban_history "
+				+ "INNER JOIN unban_histories ON usl_action_unban_history.usl_action_id = ? AND usl_action_unban_history.unban_history_id = unban_histories.id "
+				+ "INNER JOIN handled_modactions ON unban_histories.handled_modaction_id = handled_modactions.id AND "
+				+ "handled_modactions.monitored_subreddit_id = ?")) {
+			statement.setInt(1, uslActionId);
+			statement.setInt(2, subredditId);
+			try (ResultSet set = statement.executeQuery()) {
+				if(!set.next())
+					return null;
+				
+				return new UnbanHistory(set.getInt(1), set.getInt(2), set.getInt(3), set.getInt(4));
+			}
+		}catch(SQLException e) {
+			logger.throwing(e);
+			throw new RuntimeException(e);
+		}
+	}
+
+
+	@Override
+	public List<UnbanHistory> fetchByPerson(int personId) {
+		return fetchByAction("SELECT * FROM " + table + " WHERE unbanned_person_id=?", 
+				new PreparedStatementSetVarsUnsafe(new MysqlTypeValueTuple(Types.INTEGER, personId)),
+				fetchListFromSetFunction());
+	}
+
+	@Override
 	protected UnbanHistory fetchFromSet(ResultSet set) throws SQLException {
 		return new UnbanHistory(set.getInt("id"), set.getInt("mod_person_id"),
 				set.getInt("unbanned_person_id"), set.getInt("handled_modaction_id"));
@@ -168,5 +198,4 @@ public class MysqlUnbanHistoryMapping extends MysqlObjectWithIDMapping<UnbanHist
 		statement.close();
 		
 	}
-
 }

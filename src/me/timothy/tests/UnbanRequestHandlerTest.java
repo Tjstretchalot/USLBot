@@ -1,10 +1,13 @@
 package me.timothy.tests;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Paths;
-import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -17,391 +20,449 @@ import org.junit.Test;
 import me.timothy.bots.USLDatabase;
 import me.timothy.bots.USLFileConfiguration;
 import me.timothy.bots.USLUnbanRequestHandler;
+import me.timothy.bots.functions.IsModeratorFunction;
 import me.timothy.bots.memory.UnbanRequestResult;
 import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.HandledModAction;
+import me.timothy.bots.models.Hashtag;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
-import me.timothy.bots.models.Response;
-import me.timothy.bots.models.SubscribedHashtag;
 import me.timothy.bots.models.TraditionalScammer;
-import me.timothy.bots.models.UnbanHistory;
+import me.timothy.bots.models.USLAction;
 import me.timothy.bots.models.UnbanRequest;
 import me.timothy.tests.database.mysql.MysqlTestUtils;
 
 public class UnbanRequestHandlerTest {
+	private static class MockIsModeratorFunction implements IsModeratorFunction {
+		public Map<String, Set<String>> usersToSubreddits;
+		
+		public MockIsModeratorFunction() {
+			usersToSubreddits = new HashMap<>();
+		}
+		
+		@Override
+		public Boolean isModerator(String subreddit, String user) {
+			Set<String> subs = usersToSubreddits.getOrDefault(user, null);
+			if(subs == null)
+				return false;
+			return subs.contains(subreddit);
+		}
+		
+		public void addMod(String user, String sub) {
+			Set<String> cur = usersToSubreddits.getOrDefault(user, null);
+			if(cur == null) {
+				cur = new HashSet<>();
+				usersToSubreddits.put(user, cur);
+			}
+			cur.add(sub);
+		}
+	}
+	
 	private USLDatabase database;
 	private USLFileConfiguration config;
+	
+	private MockIsModeratorFunction isModerator;
 	private USLUnbanRequestHandler handler;
-	/** This is how IsModeratorFunction works */
-	private Map<String, Set<String>> usersToModeratedSubreddits;
+	
+	private DBShortcuts db;
 	
 	@Before
 	public void setUp() throws NullPointerException, IOException {
 		config = new USLFileConfiguration(Paths.get("tests"));
 		config.load();
 		database = MysqlTestUtils.getDatabase(config.getProperties().get("database"));
-		usersToModeratedSubreddits = new HashMap<>();
-		handler = new USLUnbanRequestHandler(database, config, (subreddit, user) -> {
-			if(!usersToModeratedSubreddits.containsKey(user)) {
-				return false;
-			}
-			
-			Set<String> moderated = usersToModeratedSubreddits.get(user);
-			return moderated.contains(subreddit.toLowerCase());
-		});
 		
 		MysqlTestUtils.clearDatabase(database);
-	}
-	
-	private void addModerator(String user, String subreddit) {
-		Set<String> moderated = null;
-		if(!usersToModeratedSubreddits.containsKey(user)) {
-			moderated = new HashSet<>();
-			usersToModeratedSubreddits.put(user, moderated);
-		}else {
-			moderated = usersToModeratedSubreddits.get(user);
-		}
-		moderated.add(subreddit.toLowerCase());
-	}
-	
-	private void removeModerator(String user, String subreddit) {
-		usersToModeratedSubreddits.get(user).remove(subreddit);
-	}
-	
-	/**
-	 * Make sure setup got everything not null
-	 */
-	@Test
-	public void testTest() {
-		assertNotNull(database);
-		assertNotNull(config);
-		assertNotNull(handler);
-	}
-	
-	/**
-	 * Sets up the situation that would occur if paul banned john on paulssub, which 
-	 * is propagated to ericssub, and then paul requests an unban on john
-	 */
-	@Test
-	public void testTypicalUnban() {
-		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
-		Person john = database.getPersonMapping().fetchOrCreateByUsername("john");
-		Person me = database.getPersonMapping().fetchOrCreateByUsername(config.getProperty("user.username"));
-		
-		MonitoredSubreddit paulsSub = new MonitoredSubreddit(-1, "paulssub", false, false, false);
-		database.getMonitoredSubredditMapping().save(paulsSub);
-		
-		MonitoredSubreddit ericsSub = new MonitoredSubreddit(-1, "ericssub", false, false, false);
-		database.getMonitoredSubredditMapping().save(ericsSub);
-		
-		addModerator(paul.username, paulsSub.subreddit);
-		
-		long now = System.currentTimeMillis();
-		long oneDayInMS = 1000 * 60 * 60 * 24;
-		long fiveDaysAgo = now - (oneDayInMS * 5);
-		long fourDaysAgo = now - (oneDayInMS * 4);
-		SubscribedHashtag ericsTag = new SubscribedHashtag(-1, ericsSub.id, "#scammer", new Timestamp(now), null);
-		database.getSubscribedHashtagMapping().save(ericsTag);
-		
-		HandledModAction paulBansJohnHMA = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(fiveDaysAgo));
-		database.getHandledModActionMapping().save(paulBansJohnHMA);
-		
-		BanHistory paulBansJohnBH = new BanHistory(-1, paul.id, john.id, paulBansJohnHMA.id, "#scammer", "permanent");
-		database.getBanHistoryMapping().save(paulBansJohnBH);
-		
-		HandledModAction meBanJohnHMA = new HandledModAction(-1, ericsSub.id, "ModAction_ID2", new Timestamp(fiveDaysAgo));
-		database.getHandledModActionMapping().save(meBanJohnHMA);
-		
-		BanHistory meBanJohnBH = new BanHistory(-1, me.id, john.id, meBanJohnHMA.id, "#scammer", "permanent");
-		database.getBanHistoryMapping().save(meBanJohnBH);
-		
-		UnbanRequest paulUnbanJohnRequest = new UnbanRequest(-1, paul.id, john.id, new Timestamp(fourDaysAgo), null, false);
-		database.getUnbanRequestMapping().save(paulUnbanJohnRequest);
-		
-		database.getResponseMapping().save(new Response(-1, "unban_request_valid_modmail_title", "<unban mod> removed <unbanned user> from USL", new Timestamp(now), new Timestamp(now)));
-		database.getResponseMapping().save(new Response(-1, "unban_request_valid_modmail_body", "I have unbanned /u/<unbanned user> on the request of /u/<unban mod>. /u/<unbanned user> was originally banned on "
-				+ "/r/<original ban subreddit> by /u/<original ban mod>, with the description <original description>", new Timestamp(now), new Timestamp(now)));
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_authorized_title", "auth title", new Timestamp(now), new Timestamp(now)));
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_authorized_body", "auth body", new Timestamp(now), new Timestamp(now)));
-		
-		UnbanRequestResult result = handler.handleUnbanRequest(paulUnbanJohnRequest);
-		assertEquals(paulUnbanJohnRequest, result.unbanRequest);
-		assertEquals(2, result.unbans.size());
-		assertEquals(john, result.unbans.get(0).person);
-		assertEquals(john, result.unbans.get(1).person);
-		if(result.unbans.get(0).subreddit.equals(paulsSub)) {
-			assertEquals(ericsSub, result.unbans.get(1).subreddit);
-		}else {
-			assertEquals(ericsSub, result.unbans.get(0).subreddit);
-			assertEquals(paulsSub, result.unbans.get(1).subreddit);
-		}
-		assertEquals(2, result.modmailPMs.size());
-		assertEquals("paul removed john from USL", result.modmailPMs.get(0).title);
-		assertEquals("I have unbanned /u/john on the request of /u/paul. /u/john was originally banned on /r/paulssub by /u/paul, with the description #scammer",
-				result.modmailPMs.get(0).body);
-		assertEquals("paul removed john from USL", result.modmailPMs.get(1).title);
-		assertEquals("I have unbanned /u/john on the request of /u/paul. /u/john was originally banned on /r/paulssub by /u/paul, with the description #scammer",
-				result.modmailPMs.get(1).body);
-		if(result.modmailPMs.get(0).subreddit.equals(paulsSub)) {
-			assertEquals(ericsSub, result.modmailPMs.get(1).subreddit);
-		}else {
-			assertEquals(ericsSub, result.modmailPMs.get(0).subreddit);
-			assertEquals(paulsSub, result.modmailPMs.get(1).subreddit);
-		}
-		assertEquals(1, result.userPMs.size());
-		assertEquals(paul, result.userPMs.get(0).person);
-		assertEquals("auth title", result.userPMs.get(0).title);
-		assertEquals("auth body", result.userPMs.get(0).body);
-		assertFalse(result.invalid);
-		assertNull(result.scammerToRemove);
-	}
-	
-	@Test
-	public void testFlagsNonModeratorInvalid() {
-		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
-		Person eric = database.getPersonMapping().fetchOrCreateByUsername("eric");
-		
-		MonitoredSubreddit paulsSub = new MonitoredSubreddit(-1, "paulssub", false, false, false);
-		database.getMonitoredSubredditMapping().save(paulsSub);
 
-		long now = System.currentTimeMillis();
-		HandledModAction paulBansEricHMA = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(now - 10000));
-		database.getHandledModActionMapping().save(paulBansEricHMA);
+		db = new DBShortcuts(database, config);
+		isModerator = new MockIsModeratorFunction();
+		handler = new USLUnbanRequestHandler(database, config, isModerator);
 		
-		BanHistory paulBansEricBH = new BanHistory(-1, paul.id, eric.id, paulBansEricHMA.id, "#scammer", "permanent");
-		database.getBanHistoryMapping().save(paulBansEricBH);
+		setupResponses();
+	}
+	
+	private void setupResponses() {
+		db.response("unban_request_to_mod_denied_generic_title");
+		db.response("unban_request_to_mod_denied_generic_body");
+		db.response("unban_request_to_mod_denied_prevented_title");
+		db.response("unban_request_to_mod_denied_prevented_body");
+		db.response("unban_request_to_mod_denied_unknown_title");
+		db.response("unban_request_to_mod_denied_unknown_body");
+		db.response("unban_request_to_mod_denied_no_tags_title");
+		db.response("unban_request_to_mod_denied_no_tags_body");
+		db.response("unban_request_to_mod_approved_title");
+		db.response("unban_request_to_mod_approved_body_no_footer");
+		db.response("unban_request_to_mod_approved_tradscammer_append");
+		db.response("unban_request_to_mod_approved_override_append");
+		db.response("unban_request_to_mod_approved_footer");
+	}
+	
+	@Test
+	public void deniesRandomUser() {
+		Person mod = db.mod();
+		Person banned = db.user1();
+		Person rando = db.person("rando");
+		db.bot();
 		
-		UnbanRequest paulUnbanEricRequest = new UnbanRequest(-1, paul.id, eric.id, new Timestamp(now), null, false);
-		database.getUnbanRequestMapping().save(paulUnbanEricRequest);
+		MonitoredSubreddit sub = db.sub();
+		db.primarySub();
 		
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_unauthorized_body", "you dont have perms", new Timestamp(now), new Timestamp(now)));
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_unauthorized_title", "no perms", new Timestamp(now), new Timestamp(now)));
-		UnbanRequestResult result = handler.handleUnbanRequest(paulUnbanEricRequest);
-		assertEquals(0, result.unbans.size());
-		assertEquals(0, result.modmailPMs.size());
-		assertEquals(1, result.userPMs.size());
-		assertEquals(paul, result.userPMs.get(0).person);
-		assertEquals("no perms", result.userPMs.get(0).title);
-		assertEquals("you dont have perms", result.userPMs.get(0).body);
+		db.sketchyTag();
+		Hashtag scammer = db.scammerTag();
+		
+		HandledModAction hma = db.hma(sub, db.now(-20000));
+		BanHistory bh = db.bh(mod, banned, hma, "#scammer", true);
+		
+		USLAction act = db.action(true, banned, new Hashtag[] { scammer }, new BanHistory[] { bh }, null);
+		act.createdAt = db.now(-10000);
+		database.getUSLActionMapping().save(act);
+		
+		UnbanRequest req = db.unbanRequest(rando, banned, db.now(-5000), null, false);
+		
+		// verify it didn't actually do anything
+		UnbanRequestResult result = handler.handleUnbanRequest(req);
+		assertFalse(req.invalid);
+		
+		UnbanRequest fromDb = database.getUnbanRequestMapping().fetchByID(req.id);
+		assertFalse(fromDb.invalid);
+		
+		// verify request was denied & we responded
 		assertTrue(result.invalid);
-		assertNull(result.scammerToRemove);
+		assertFalse(result.userPMs.isEmpty());
 	}
 	
 	@Test
-	public void testFlagsWrongModeratorInvalid() {
-		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
-		Person eric = database.getPersonMapping().fetchOrCreateByUsername("eric");
-		Person me = database.getPersonMapping().fetchOrCreateByUsername(config.getProperty("user.username"));
+	public void deniesReadOnly() {
+		Person mod2 = db.mod2();
+		Person mod = db.mod();
+		Person bot = db.bot();
+		Person banned = db.user1();
 		
-		MonitoredSubreddit paulsSub = new MonitoredSubreddit(-1, "paulssub", false, false, false);
-		database.getMonitoredSubredditMapping().save(paulsSub);
-
-		MonitoredSubreddit secondSub = new MonitoredSubreddit(-1, "secondsub", false, false, false);
-		database.getMonitoredSubredditMapping().save(secondSub);
+		MonitoredSubreddit sub1 = db.sub();
+		MonitoredSubreddit sub2 = db.sub2();
+		db.primarySub();
 		
-	    addModerator("paul", "secondsub");
-	    
-		long now = System.currentTimeMillis();
-		HandledModAction paulBansEricHMA = new HandledModAction(-1, paulsSub.id, "ModAction_ID1", new Timestamp(now - 10000));
-		database.getHandledModActionMapping().save(paulBansEricHMA);
+		sub1.readOnly = true;
+		database.getMonitoredSubredditMapping().save(sub1);
 		
-		BanHistory paulBansEricBH = new BanHistory(-1, paul.id, eric.id, paulBansEricHMA.id, "#scammer", "permanent");
-		database.getBanHistoryMapping().save(paulBansEricBH);
+		isModerator.addMod(mod.username, sub1.subreddit);
+		isModerator.addMod(mod2.username, sub2.subreddit);
 		
-		HandledModAction meBanEricHMA = new HandledModAction(-1, secondSub.id, "ModAction_ID2", new Timestamp(now - 10000));
-		database.getHandledModActionMapping().save(meBanEricHMA);
+		Hashtag scammer = db.scammerTag();
 		
-		BanHistory meBanEricBH = new BanHistory(-1, me.id, eric.id, meBanEricHMA.id, "#scammer", "permanent");
-		database.getBanHistoryMapping().save(meBanEricBH);
+		db.attach(sub1, scammer);
+		db.attach(sub2, scammer);
 		
-		UnbanRequest paulUnbanEricRequest = new UnbanRequest(-1, paul.id, eric.id, new Timestamp(now), null, false);
-		database.getUnbanRequestMapping().save(paulUnbanEricRequest);
+		for(int i = 0; i < 3; i++) { db.hma(sub1, db.now(-100000 * i)); db.hma(sub2, db.now(-90000 * (i+1))); }
 		
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_unauthorized_body", "you dont have perms", new Timestamp(now), new Timestamp(now)));
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_unauthorized_title", "no perms", new Timestamp(now), new Timestamp(now)));
-		UnbanRequestResult result = handler.handleUnbanRequest(paulUnbanEricRequest);
-		assertEquals(0, result.unbans.size());
-		assertEquals(0, result.modmailPMs.size());
-		assertEquals(1, result.userPMs.size());
-		assertEquals(paul, result.userPMs.get(0).person);
-		assertEquals("no perms", result.userPMs.get(0).title);
-		assertEquals("you dont have perms", result.userPMs.get(0).body);
-		assertNull(result.scammerToRemove);
+		HandledModAction hma1 = db.hma(sub1, db.now(-50000));
+		BanHistory ban1 = db.bh(mod, banned, hma1, "#scammer", true);
+		
+		HandledModAction hma2 = db.hma(sub2, db.now(-45000));
+		BanHistory ban2 = db.bh(bot, banned, hma2, "#scammer", true);
+		
+		db.action(true, banned, new Hashtag[] { scammer }, new BanHistory[] { ban1, ban2 }, null);
+		
+		UnbanRequest req1 = db.unbanRequest(mod, banned, db.now(-30000), null, false);
+		
+		UnbanRequestResult res = handler.handleUnbanRequest(req1);
+		assertTrue(res.invalid);
+		assertFalse(res.userPMs.isEmpty());
+	}
+	
+	@Test
+	public void deniesIfNotBannedWithAction() {
+		Person mod = db.mod();
+		Person banned = db.user1();
+		Person unrelated = db.person("user2");
+		
+		MonitoredSubreddit sub = db.sub();
+		db.primarySub();
+		
+		db.hma(sub, db.now(-59000));
+		
+		HandledModAction hma1 = db.hma(sub, db.now(-40000));
+		db.bh(mod, banned, hma1, "msg", true);
+		
+		isModerator.addMod(mod.username, sub.subreddit);
+		
+		UnbanRequest req = db.unbanRequest(mod, banned, db.now(-10000), null, false);
+		
+		UnbanRequestResult result = handler.handleUnbanRequest(req);
 		assertTrue(result.invalid);
-	}
-	
-	@Test
-	public void testSendsUnauthorizedWhenNothingToUnban() {
-		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
-		Person eric = database.getPersonMapping().fetchOrCreateByUsername("eric");
+		assertFalse(result.userPMs.isEmpty());
 		
-		MonitoredSubreddit paulsSub = new MonitoredSubreddit(-1, "paulssub", false, false, false);
-		database.getMonitoredSubredditMapping().save(paulsSub);
-
-		long now = System.currentTimeMillis();
+		UnbanRequest req2 = db.unbanRequest(mod, unrelated, db.now(-5000), null, false);
 		
-		UnbanRequest paulUnbanEricRequest = new UnbanRequest(-1, paul.id, eric.id, new Timestamp(now), null, false);
-		database.getUnbanRequestMapping().save(paulUnbanEricRequest);
-		
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_unauthorized_body", "you dont have perms", new Timestamp(now), new Timestamp(now)));
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_unauthorized_title", "no perms", new Timestamp(now), new Timestamp(now)));
-		UnbanRequestResult result = handler.handleUnbanRequest(paulUnbanEricRequest);
-		assertEquals(0, result.unbans.size());
-		assertEquals(0, result.modmailPMs.size());
-		assertEquals(1, result.userPMs.size());
-		assertEquals(paul, result.userPMs.get(0).person);
-		assertEquals("no perms", result.userPMs.get(0).title);
-		assertEquals("you dont have perms", result.userPMs.get(0).body);
-		assertNull(result.scammerToRemove);
+		result = handler.handleUnbanRequest(req2);
 		assertTrue(result.invalid);
+		assertFalse(result.userPMs.isEmpty());
+				
 	}
 	
 	@Test
-	public void testSendsAuthorizedWhenNothingToUnban() {
-		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
-		Person eric = database.getPersonMapping().fetchOrCreateByUsername("eric");
+	public void approvesForModOfOriginatingSubreddit() {
+		Person mod2 = db.mod2();
+		Person mod = db.mod();
+		Person bot = db.bot();
+		Person banned = db.user1();
 		
-		MonitoredSubreddit paulsSub = new MonitoredSubreddit(-1, "paulssub", false, false, false);
-		database.getMonitoredSubredditMapping().save(paulsSub);
-
-		long now = System.currentTimeMillis();
+		MonitoredSubreddit sub1 = db.sub();
+		MonitoredSubreddit sub2 = db.sub2();
+		db.primarySub();
 		
-		addModerator("paul", "paulssub");
+		isModerator.addMod(mod.username, sub1.subreddit);
+		isModerator.addMod(mod2.username, sub2.subreddit);
 		
-		UnbanRequest paulUnbanEricRequest = new UnbanRequest(-1, paul.id, eric.id, new Timestamp(now), null, false);
-		database.getUnbanRequestMapping().save(paulUnbanEricRequest);
-
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_unauthorized_body", "you dont have perms", new Timestamp(now), new Timestamp(now)));
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_unauthorized_title", "no perms", new Timestamp(now), new Timestamp(now)));
-		UnbanRequestResult result = handler.handleUnbanRequest(paulUnbanEricRequest);
-		assertEquals(0, result.unbans.size());
-		assertEquals(0, result.modmailPMs.size());
-		assertEquals(1, result.userPMs.size());
-		assertEquals(paul, result.userPMs.get(0).person);
-		assertEquals("no perms", result.userPMs.get(0).title);
-		assertEquals("you dont have perms", result.userPMs.get(0).body);
-		assertNull(result.scammerToRemove);
-		assertTrue(result.invalid);
-	}
-	
-	@Test 
-	public void testDoesntUnbanTwice() {
-		Person emma = database.getPersonMapping().fetchOrCreateByUsername("emma");
-		Person ella = database.getPersonMapping().fetchOrCreateByUsername("ella");
+		Hashtag scammer = db.scammerTag();
 		
-		MonitoredSubreddit emmasSub = new MonitoredSubreddit(-1, "emmassub", false, false, false);
-		database.getMonitoredSubredditMapping().save(emmasSub);
-
-		long now = System.currentTimeMillis();
-		HandledModAction emmaBansEllaHMA = new HandledModAction(-1, emmasSub.id, "ModAction_ID1", new Timestamp(now - 20000));
-		database.getHandledModActionMapping().save(emmaBansEllaHMA);
+		db.attach(sub1, scammer);
+		db.attach(sub2, scammer);
 		
-		BanHistory emmaBansEllaBH = new BanHistory(-1, emma.id, ella.id, emmaBansEllaHMA.id, "#scammer", "permanent");
-		database.getBanHistoryMapping().save(emmaBansEllaBH);
+		for(int i = 0; i < 3; i++) { db.hma(sub1, db.now(-100000 * i)); db.hma(sub2, db.now(-90000 * (i+1))); }
 		
-		HandledModAction emmaUnbansEllaHMA = new HandledModAction(-1, emmasSub.id, "ModAction_ID2", new Timestamp(now - 10000));
-		database.getHandledModActionMapping().save(emmaUnbansEllaHMA);
+		HandledModAction hma1 = db.hma(sub1, db.now(-50000));
+		BanHistory ban1 = db.bh(mod, banned, hma1, "#scammer", true);
 		
-		UnbanHistory emmaUnbansEllaUBH = new UnbanHistory(-1, emma.id, ella.id, emmaUnbansEllaHMA.id);
-		database.getUnbanHistoryMapping().save(emmaUnbansEllaUBH);
+		HandledModAction hma2 = db.hma(sub2, db.now(-45000));
+		BanHistory ban2 = db.bh(bot, banned, hma2, "#scammer", true);
 		
-		addModerator("emma", "emmassub");
+		db.action(true, banned, new Hashtag[] { scammer }, new BanHistory[] { ban1, ban2 }, null);
 		
-		UnbanRequest emmaUnbanEllaReq = new UnbanRequest(-1, emma.id, ella.id, new Timestamp(now), null, false);
-		database.getUnbanRequestMapping().save(emmaUnbanEllaReq);
-
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_authorized_title", "auth title", new Timestamp(now), new Timestamp(now)));
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_authorized_body", "auth body", new Timestamp(now), new Timestamp(now)));
+		UnbanRequest req1 = db.unbanRequest(mod, banned, db.now(-30000), null, false);
 		
-		UnbanRequestResult result = handler.handleUnbanRequest(emmaUnbanEllaReq);
-		assertEquals(0, result.unbans.size());
-		assertEquals(0, result.modmailPMs.size());
-		assertEquals(1, result.userPMs.size());
-		assertEquals(emma, result.userPMs.get(0).person);
-		assertEquals("auth title", result.userPMs.get(0).title);
-		assertEquals("auth body", result.userPMs.get(0).body);
-		assertNull(result.scammerToRemove);
-		assertEquals(false, result.invalid);
+		UnbanRequestResult res = handler.handleUnbanRequest(req1);
+		assertFalse(res.invalid);
+		assertFalse(res.userPMs.isEmpty());
+		
+		UnbanRequest req2 = db.unbanRequest(mod2, banned, db.now(-28000), null, false);
+		
+		res = handler.handleUnbanRequest(req2);
+		assertTrue(res.invalid);
+		assertFalse(res.userPMs.isEmpty());
 	}
 	
 	@Test
-	public void testRemovesFromScammerList() {
-		Person me = database.getPersonMapping().fetchOrCreateByUsername(config.getProperty("user.username"));
-		Person emma = database.getPersonMapping().fetchOrCreateByUsername("emma");
-		Person paul = database.getPersonMapping().fetchOrCreateByUsername("paul");
+	public void approvesModeratorForMainSubreddit() {
+		Person mod = db.mod();
+		Person mod2 = db.mod2();
+		Person banned = db.user1();
+		db.bot();
 		
-		MonitoredSubreddit mainSub = new MonitoredSubreddit(-1, config.getProperty("user.main_sub"), false, false, false);
-		database.getMonitoredSubredditMapping().save(mainSub);
+		MonitoredSubreddit prim = db.primarySub();
+		MonitoredSubreddit sub = db.sub();
 		
-		MonitoredSubreddit emmasSub = new MonitoredSubreddit(-1, "emmassub", false, false, false);
-		database.getMonitoredSubredditMapping().save(emmasSub);
+		Hashtag scammer = db.scammerTag();
 		
-		long now = System.currentTimeMillis();
-		TraditionalScammer paulScammer = new TraditionalScammer(-1, paul.id, "grdftr", "#scammer", new Timestamp(now));
-		database.getTraditionalScammerMapping().save(paulScammer);
+		isModerator.addMod(mod.username, sub.subreddit);
+		isModerator.addMod(mod2.username, prim.subreddit);
 		
-		HandledModAction meBansPaulOnEmmaHMA = new HandledModAction(-1, emmasSub.id, "ModAction_ID1", new Timestamp(now));
-		database.getHandledModActionMapping().save(meBansPaulOnEmmaHMA);
+		db.hma(sub, db.now(-30000));
+		db.hma(sub, db.now(-33000));
+		db.hma(prim, db.now(-15000));
 		
-		BanHistory meBansPaulOnEmmaBH = new BanHistory(-1, me.id, paul.id, meBansPaulOnEmmaHMA.id, "#scammer", "permanent");
-		database.getBanHistoryMapping().save(meBansPaulOnEmmaBH);
+		HandledModAction hma = db.hma(sub, db.now(-10000));
+		BanHistory bh = db.bh(mod, banned, hma, "#scammer", true);
 		
-		HandledModAction meBansPaulOnMainHMA = new HandledModAction(-1, mainSub.id, "ModAction_ID2", new Timestamp(now));
-		database.getHandledModActionMapping().save(meBansPaulOnMainHMA);
+		db.action(true, banned, new Hashtag[] { scammer }, new BanHistory[] { bh }, null);
 		
-		BanHistory meBansPaulOnMainBH = new BanHistory(-1, me.id, paul.id, meBansPaulOnMainHMA.id, "#scammer", "permanent");
-		database.getBanHistoryMapping().save(meBansPaulOnMainBH);
-
-		UnbanRequest emmaUnbanPaulReq = new UnbanRequest(-1, emma.id, paul.id, new Timestamp(now + 10000), null, false);
-		database.getUnbanRequestMapping().save(emmaUnbanPaulReq);
+		UnbanRequest req = db.unbanRequest(mod2, banned, db.now(-8000), null, false);
 		
-		// First request - rejected (emma not moderator on main_sub)
-		
-		addModerator("emma", "emmassub");
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_unauthorized_body", "you dont have perms", new Timestamp(now), new Timestamp(now)));
-		database.getResponseMapping().save(new Response(-1, "unban_request_moderator_unauthorized_title", "no perms", new Timestamp(now), new Timestamp(now)));
-
-		UnbanRequestResult result = handler.handleUnbanRequest(emmaUnbanPaulReq);
-		assertEquals(0, result.unbans.size());
-		assertEquals(0, result.modmailPMs.size());
-		assertEquals(1, result.userPMs.size());
-		assertEquals(emma, result.userPMs.get(0).person);
-		assertEquals("no perms", result.userPMs.get(0).title);
-		assertEquals("you dont have perms", result.userPMs.get(0).body);
-		assertNull(result.scammerToRemove);
-		assertEquals(true, result.invalid);
-		
-		// Second request - works
-
-		removeModerator("emma", "emmassub");
-		addModerator("emma", mainSub.subreddit);
-		database.getResponseMapping().save(new Response(-1, "unban_request_removed_from_list_title", "removed from list", new Timestamp(now), new Timestamp(now)));
-		database.getResponseMapping().save(new Response(-1, "unban_request_removed_from_list_body", "<unbanned user> is no longer on trad scammer list", new Timestamp(now), new Timestamp(now)));
-		database.getResponseMapping().save(new Response(-1, "unban_request_valid_modmail_list_title", "unbanning", new Timestamp(now), new Timestamp(now)));
-		database.getResponseMapping().save(new Response(-1, "unban_request_valid_modmail_list_body", "unbanningbody", new Timestamp(now), new Timestamp(now)));
-		
-		result = handler.handleUnbanRequest(emmaUnbanPaulReq);
-		assertEquals(2, result.unbans.size());
-		assertEquals(paul, result.unbans.get(0).person);
-		assertEquals(paul, result.unbans.get(0).person);
-		assertTrue(result.unbans.stream().anyMatch((un) -> un.subreddit.equals(emmasSub)));
-		assertTrue(result.unbans.stream().anyMatch((un) -> un.subreddit.equals(mainSub)));
-		assertEquals(3, result.modmailPMs.size());
-		assertTrue(result.modmailPMs.stream().anyMatch((pm) -> pm.subreddit.equals(mainSub) && pm.title.equals("removed from list") && pm.body.equals("paul is no longer on trad scammer list")));
-		assertTrue(result.modmailPMs.stream().anyMatch((pm) -> pm.subreddit.equals(mainSub) && pm.title.equals("unbanning") && pm.body.equals("unbanningbody")));
-		assertTrue(result.modmailPMs.stream().anyMatch((pm) -> pm.subreddit.equals(emmasSub) && pm.title.equals("unbanning") && pm.body.equals("unbanningbody")));
-		assertEquals(0, result.userPMs.size());
-		assertEquals(false, result.invalid);
-		assertEquals(paulScammer, result.scammerToRemove);
+		UnbanRequestResult res = handler.handleUnbanRequest(req);
+		assertFalse(res.invalid);
+		assertFalse(res.userPMs.isEmpty());
 	}
 	
+	@Test
+	public void deniesIfConflict() { 
+		Person mod2 = db.mod2();
+		Person mod = db.mod();
+		Person bot = db.bot();
+		Person banned = db.user1();
+		
+		MonitoredSubreddit prim = db.primarySub();
+		MonitoredSubreddit sub = db.sub();
+		MonitoredSubreddit sub2 = db.sub2();
+		
+		Hashtag scammer = db.scammerTag();
+		Hashtag sketchy = db.sketchyTag();
+		
+		db.attach(prim, scammer);
+		db.attach(sub, scammer);
+		db.attach(sub2, scammer);
+		db.attach(sub2, sketchy);
+		
+		isModerator.addMod(mod.username, sub.subreddit);
+		isModerator.addMod(mod2.username, sub2.subreddit);
+		
+		HandledModAction hma1 = db.hma(prim, db.now(-45000));
+		BanHistory ban1 = db.bh(bot, banned, hma1, "#scammer", true);
+		
+		HandledModAction hma2 = db.hma(sub, db.now(-60000));
+		BanHistory ban2 = db.bh(mod, banned, hma2, "#scammer", true);
+		
+		HandledModAction hma3 = db.hma(sub2, db.now(-50000));
+		BanHistory ban3 = db.bh(mod2, banned, hma3, "#sketchy", true);
+		
+		db.action(true, banned, new Hashtag[] { scammer, sketchy }, new BanHistory[] { ban1, ban2, ban3 }, null);
+		
+		UnbanRequest req = db.unbanRequest(mod2, banned, db.now(-8000), null, false);
+		
+		UnbanRequestResult res = handler.handleUnbanRequest(req);
+		assertTrue(res.invalid);
+		assertFalse(res.userPMs.isEmpty());
+		
+		req = db.unbanRequest(mod, banned, db.now(-5000), null, false);
+		
+		res = handler.handleUnbanRequest(req);
+		assertTrue(res.invalid);
+		assertFalse(res.userPMs.isEmpty());
+	}
+	
+	@Test
+	public void removesFromTradListIfUSLMod() {
+		Person mod = db.mod();
+		Person bot = db.bot();
+		Person banned = db.user1();
+		
+		MonitoredSubreddit prim = db.primarySub();
+		MonitoredSubreddit sub = db.sub();
+		
+		Hashtag scammer = db.scammerTag();
+		
+		db.attach(sub, scammer);
+		
+		isModerator.addMod(mod.username, prim.subreddit);
+		
+		HandledModAction hma = db.hma(sub, db.now(-10000));
+		BanHistory bh = db.bh(bot, banned, hma, "#scammer", true);
+		
+		db.action(true, banned, new Hashtag[] { scammer }, new BanHistory[] { bh }, null);
+		
+		database.getTraditionalScammerMapping().save(new TraditionalScammer(-1, banned.id, "on the trad list", "#scammer", db.now(-30000)));
+		
+		UnbanRequest req = db.unbanRequest(mod, banned, db.now(-5000), null, false);
+		
+		UnbanRequestResult res = handler.handleUnbanRequest(req);
+		assertFalse(res.invalid);
+		assertFalse(res.userPMs.isEmpty());
+		assertNotNull(res.scammerToRemove);
+		assertEquals(banned.id, res.scammerToRemove.personID);
+	}
+	
+	@Test
+	public void removesFromTradListIfNotUSLModButOnlyStake() {
+		Person mod = db.mod();
+		Person bot = db.bot();
+		Person banned = db.user1();
+		
+		/*MonitoredSubreddit prim = */db.primarySub();
+		MonitoredSubreddit sub1 = db.sub();
+		MonitoredSubreddit sub2 = db.sub2();
+		
+		db.sketchyTag();
+		Hashtag scammer = db.scammerTag();
+		
+		db.attach(sub1, scammer);
+		db.attach(sub2, scammer);
+		
+		isModerator.addMod(mod.username, sub1.subreddit);
+		
+		HandledModAction hma1 = db.hma(sub1, db.now(-30000));
+		BanHistory bh1 = db.bh(mod, banned, hma1, "#scammer", true);
+		
+		HandledModAction hma2 = db.hma(sub2, db.now(-25000));
+		BanHistory bh2 = db.bh(bot, banned, hma2, "#scammer", true);
+		
+		db.action(true, banned, new Hashtag[] { scammer }, new BanHistory[] { bh1, bh2 }, null);
+		database.getTraditionalScammerMapping().save(new TraditionalScammer(-1, banned.id, "on the trad list", "#scammer", db.now(-30000)));
+		
+		UnbanRequest req = db.unbanRequest(mod, banned, db.now(-10000), null, false);
+
+		UnbanRequestResult res = handler.handleUnbanRequest(req);
+		assertFalse(res.invalid);
+		assertFalse(res.userPMs.isEmpty());
+		assertNotNull(res.scammerToRemove);
+		assertEquals(banned.id, res.scammerToRemove.personID);
+	}
+	
+	@Test
+	public void deniesFromTradListIfNoStake() {
+		Person banned = db.user1();
+		Person mod = db.mod();
+		Person bot = db.bot();
+
+		MonitoredSubreddit sub1 = db.sub();
+		db.primarySub();
+		MonitoredSubreddit sub2 = db.sub2();
+		
+		db.sketchyTag();
+		Hashtag scammer = db.scammerTag();
+		
+		db.attach(sub1, scammer);
+		db.attach(sub2, scammer);
+		
+		isModerator.addMod(mod.username, sub2.subreddit);
+		
+		HandledModAction hma1 = db.hma(sub1, db.now(-30000));
+		BanHistory bh1 = db.bh(bot, banned, hma1, "#scammer", true);
+		
+		HandledModAction hma2 = db.hma(sub2, db.now(-25000));
+		BanHistory bh2 = db.bh(mod, banned, hma2, "notag", true);
+		
+		db.action(true, banned, new Hashtag[] { scammer }, new BanHistory[] { bh1, bh2 }, null);
+		database.getTraditionalScammerMapping().save(new TraditionalScammer(-1, banned.id, "on the trad list", "#scammer", db.now(-30000)));
+
+		UnbanRequest req = db.unbanRequest(mod, banned, db.now(-10000), null, false);
+
+		UnbanRequestResult res = handler.handleUnbanRequest(req);
+		assertTrue(res.invalid);
+		assertFalse(res.userPMs.isEmpty());
+		assertNull(res.scammerToRemove);
+	}
+	
+	@Test
+	public void deniesFromTradListIfConflict() {
+		db.bot();
+		Person mod1 = db.mod();
+		Person mod2 = db.mod2();
+		Person banned = db.user1();
+		
+		MonitoredSubreddit sub1 = db.sub();
+		MonitoredSubreddit sub2 = db.sub2();
+		db.primarySub();
+		
+		db.scammerTag();
+		Hashtag sketchy = db.sketchyTag();
+		
+		db.attach(sub1, sketchy);
+		db.attach(sub2, sketchy);
+		
+		isModerator.addMod(mod1.username, sub1.subreddit);
+		isModerator.addMod(mod2.username, sub2.subreddit);
+		
+		HandledModAction hma1 = db.hma(sub2, db.now(-30000));
+		BanHistory bh1 = db.bh(mod2, banned, hma1, "#sketchy", true);
+		
+		HandledModAction hma2 = db.hma(sub1, db.now(-25000));
+		BanHistory bh2 = db.bh(mod1, banned, hma2, "#sketchy", true);
+		
+		db.action(true, banned, new Hashtag[] { sketchy }, new BanHistory[] { bh1,  bh2 }, null);
+		database.getTraditionalScammerMapping().save(new TraditionalScammer(-1, banned.id, "on the trad list", "#scammer", db.now(-30000)));
+
+		UnbanRequest req = db.unbanRequest(mod1, banned, db.now(-10000), null, false);
+
+		UnbanRequestResult res = handler.handleUnbanRequest(req);
+		assertTrue(res.invalid);
+		assertFalse(res.userPMs.isEmpty());
+		assertNull(res.scammerToRemove);
+	}
+
 	@After 
 	public void cleanUp() {
 		database.disconnect();
 		database = null;
 		config = null;
-		usersToModeratedSubreddits = null;
 		handler = null;
 	}
 }

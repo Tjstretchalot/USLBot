@@ -29,4 +29,11 @@ public interface MappingDatabase {
 	public TemporaryAuthLevelMapping getTemporaryAuthLevelMapping();
 	public TemporaryAuthRequestMapping getTemporaryAuthRequestMapping();
 	public AcceptModeratorInviteRequestMapping getAcceptModeratorInviteRequestMapping();
+	public HashtagMapping getHashtagMapping();
+	public USLActionMapping getUSLActionMapping();
+	public USLActionBanHistoryMapping getUSLActionBanHistoryMapping();
+	public USLActionHashtagMapping getUSLActionHashtagMapping();
+	public USLActionUnbanHistoryMapping getUSLActionUnbanHistoryMapping();
+	public DirtyPersonMapping getDirtyPersonMapping();
+	public RedditToMeaningProgressMapping getRedditToMeaningProgressMapping();
 }

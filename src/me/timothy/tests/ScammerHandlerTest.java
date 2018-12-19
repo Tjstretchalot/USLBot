@@ -16,6 +16,7 @@ import me.timothy.bots.USLTraditionalScammerHandler;
 import me.timothy.bots.memory.TraditionalScammerHandlerResult;
 import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.HandledModAction;
+import me.timothy.bots.models.Hashtag;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
 import me.timothy.bots.models.Response;
@@ -58,8 +59,11 @@ public class ScammerHandlerTest {
 		
 		MonitoredSubreddit ericsSub = new MonitoredSubreddit(-1, "ericssub", false, false, false);
 		database.getMonitoredSubredditMapping().save(ericsSub);
+
+		Hashtag scammerTag = new Hashtag(-1, "#scammer", "famous tag", paul.id, paul.id, new Timestamp(now), new Timestamp(now));
+		database.getHashtagMapping().save(scammerTag);
 		
-		SubscribedHashtag hashtag = new SubscribedHashtag(-1, ericsSub.id, "#scammer", new Timestamp(now), null);
+		SubscribedHashtag hashtag = new SubscribedHashtag(-1, ericsSub.id, scammerTag.id, new Timestamp(now), null);
 		database.getSubscribedHashtagMapping().save(hashtag);
 		
 		database.getResponseMapping().save(new Response(-1, "traditional_scammer_banned_ban_message", "You are on the universal scammer list.", new Timestamp(now), new Timestamp(now)));
@@ -87,8 +91,11 @@ public class ScammerHandlerTest {
 		
 		MonitoredSubreddit emmasSub = new MonitoredSubreddit(-1, "emmassub", false, false, false);
 		database.getMonitoredSubredditMapping().save(emmasSub);
+
+		Hashtag scammerTag = new Hashtag(-1, "#scammer", "famous tag", paul.id, paul.id, new Timestamp(now), new Timestamp(now));
+		database.getHashtagMapping().save(scammerTag);
 		
-		SubscribedHashtag hashtag = new SubscribedHashtag(-1, emmasSub.id, "#scammer", new Timestamp(now), null);
+		SubscribedHashtag hashtag = new SubscribedHashtag(-1, emmasSub.id, scammerTag.id, new Timestamp(now), null);
 		database.getSubscribedHashtagMapping().save(hashtag);
 		
 		HandledModAction emmaBansPaulHMA = new HandledModAction(-1, emmasSub.id, "ModAction_ID1", new Timestamp(now));
@@ -113,8 +120,11 @@ public class ScammerHandlerTest {
 		
 		MonitoredSubreddit emmasSub = new MonitoredSubreddit(-1, "emmassub", false, false, false);
 		database.getMonitoredSubredditMapping().save(emmasSub);
+
+		Hashtag scammerTag = new Hashtag(-1, "#sketchy", "second famous tag", paul.id, paul.id, new Timestamp(now), new Timestamp(now));
+		database.getHashtagMapping().save(scammerTag);
 		
-		SubscribedHashtag hashtag = new SubscribedHashtag(-1, emmasSub.id, "#sketchy", new Timestamp(now), null);
+		SubscribedHashtag hashtag = new SubscribedHashtag(-1, emmasSub.id, scammerTag.id, new Timestamp(now), null);
 		database.getSubscribedHashtagMapping().save(hashtag);
 		
 		TraditionalScammerHandlerResult result = handler.handleTraditionalScammer(paulScammer, emmasSub);

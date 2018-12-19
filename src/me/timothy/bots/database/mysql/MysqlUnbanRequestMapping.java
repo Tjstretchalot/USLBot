@@ -5,6 +5,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.List;
 
@@ -89,6 +90,22 @@ public class MysqlUnbanRequestMapping extends MysqlObjectWithIDMapping<UnbanRequ
 		return fetchByAction("SELECT * FROM " + table + " WHERE banned_person_id=? AND (handled_at IS NULL OR invalid=0) ORDER BY created_at DESC LIMIT 1", 
 				new PreparedStatementSetVarsUnsafe(new MysqlTypeValueTuple(Types.INTEGER, personID)),
 				fetchFromSetFunction());
+	}
+
+	@Override
+	public List<UnbanRequest> fetchLatestValid(Timestamp after, Timestamp before, int num) {
+		return fetchByAction("SELECT * FROM " + table + " WHERE handled_at IS NOT NULL AND invalid=0 AND handled_at >= ? AND handled_at < ? ORDER BY handled_at ASC LIMIT ?", 
+				new PreparedStatementSetVarsUnsafe(new MysqlTypeValueTuple(Types.TIMESTAMP, after),
+						new MysqlTypeValueTuple(Types.TIMESTAMP, before),
+						new MysqlTypeValueTuple(Types.INTEGER, num)),
+				fetchListFromSetFunction());
+	}
+
+	@Override
+	public List<UnbanRequest> fetchHandledByBannedPerson(int personID) {
+		return fetchByAction("SELECT * FROM " + table + " WHERE banned_person_id=? AND (handled_at IS NOT NULL)", 
+				new PreparedStatementSetVarsUnsafe(new MysqlTypeValueTuple(Types.INTEGER, personID)),
+				fetchListFromSetFunction());
 	}
 
 	@Override

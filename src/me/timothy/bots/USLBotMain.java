@@ -1,5 +1,6 @@
 package me.timothy.bots;
 
+import java.io.File;
 import java.io.IOException;
 import java.sql.SQLException;
 
@@ -41,13 +42,14 @@ public class USLBotMain {
 		
 		logger.debug("File configuration loaded.");
 		
-		Utils.USER_AGENT = config.getProperty("user.appClientID") + ":v10.24.2017 (by /u/Tjstretchalot)";
+		Utils.USER_AGENT = config.getProperty("user.appClientID") + ":v12.18.2018 (by /u/Tjstretchalot)";
 		
 		logger.debug("Connecting to database..");
 		USLDatabase database = new USLDatabase();
 
 		try {
-			database.connect(config.getProperty("database.username"), config.getProperty("database.password"), config.getProperty("database.url"));
+			database.connect(config.getProperty("database.username"), config.getProperty("database.password"), config.getProperty("database.url"), 
+					new File(config.getProperty("database.flat_folder")));
 		} catch (SQLException e) {
 			e.printStackTrace();
 			return;

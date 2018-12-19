@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.Level;
@@ -30,6 +32,7 @@ import me.timothy.bots.summon.CommentSummon;
 import me.timothy.bots.summon.LinkSummon;
 import me.timothy.bots.summon.PMSummon;
 import me.timothy.jreddit.RedditUtils;
+import me.timothy.jreddit.info.Account;
 
 /**
  * The bot driver for the universal scammer list bot. Contains
@@ -78,12 +81,18 @@ public class USLBotDriver extends BotDriver {
 		
 		backupManager = new USLDatabaseBackupManager(database, config);
 		propagator = new USLPropagator(database, config);
-		propagatorManager = new USLPropagatorManager(database, config, propagator, (result) -> handlePropagateResult(result));
+		propagatorManager = new USLPropagatorManager(database, config, propagator,
+				new USLRedditToMeaningProcessor(database, config),
+				new USLValidUnbanRequestToMeaningProcessor(database, config),
+				(result) -> handlePropagateResult(result));
 		unbanRequestHandler = new USLUnbanRequestHandler(database, config, (sub, person) -> isModerator(sub, person));
 		scammerHandler = new USLTraditionalScammerHandler(database, config);
 		raqManager = new USLRegisterAccountRequestManager(database, config);
 		rprManager = new USLResetPasswordRequestManager(database, config);
 		taHandler = new USLTemporaryAuthGranter(database, config, (sub, person) -> isModerator(sub, person), (result) -> handleTempAuthResult(result));
+		
+		unbanRequestHandler.verifyHaveResponses();
+		propagator.verifyHaveResponses();
 	}
 
 	@Override
@@ -143,7 +152,27 @@ public class USLBotDriver extends BotDriver {
 		al.append("Waiting for a bit..");
 	}
 
+	/**
+	 * Get the account for the given user, or null if that user has been deleted
+	 * 
+	 * @param person the person you are interested in
+	 * @return the account information about that person or null if it doesn't exist
+	 */
+	protected Account getAccount(String person) {
+		Account[] result = new Account[1];
+		new Retryable<Boolean>("Get Account", maybeLoginAgainRunnable) {
 
+			@Override
+			protected Boolean runImpl() throws Exception {
+				result[0] = RedditUtils.getAccountFor(bot.getUser(), person);
+				return true;
+			}
+
+		}.run();
+		sleepFor(BRIEF_PAUSE_MS);
+		return result[0];
+	}
+	
 	/**
 	 * Send out the list of user pms to confirm that someone is an
 	 * owner of an account
@@ -250,7 +279,6 @@ public class USLBotDriver extends BotDriver {
 	 */
 	protected boolean handleUnbanRequestResult(UnbanRequest request, UnbanRequestResult result, Person mod, Person toUnban) {
 		boolean didSomething = false;
-		didSomething = handleUnbans(result.unbans) || didSomething;
 		didSomething = handleModmailPMs(result.modmailPMs) || didSomething;
 		didSomething = handleUserPMs(result.userPMs) || didSomething;
 
@@ -418,7 +446,9 @@ public class USLBotDriver extends BotDriver {
 	 */
 	protected boolean handlePropagateResult(PropagateResult result) {
 		boolean didSomething = false;
-		didSomething = handleBans(result.bans) || didSomething;
+		if(result.bans.size() > 0) {
+			didSomething = handleBans(result.bans) || didSomething;
+		}
 		didSomething = handleModmailPMs(result.modmailPMs) || didSomething;
 		didSomething = handleUserPMs(result.userPMs) || didSomething;
 		return didSomething;
@@ -444,14 +474,27 @@ public class USLBotDriver extends BotDriver {
 	 * @return if we did something with reddit
 	 */
 	protected boolean handleBans(List<UserBanInformation> bans) {
+		Map<String, Boolean> nonexistentCache = new HashMap<>();
 		ActionLogMapping al = ((USLDatabase)database).getActionLogMapping();
 		boolean didSomething = false;
 		for(UserBanInformation ban : bans) {
 			al.append(String.format("Banning {link person %d} on {link subreddit %d}..", ban.person.id, ban.subreddit.id));
 			logger.printf(Level.INFO, "Banning %s on %s..", ban.person.username, ban.subreddit.subreddit);
 			
-			handleBanUser(ban);
-			sleepFor(2000);
+			Boolean exists = nonexistentCache.getOrDefault(ban.person.username, null);
+			if(exists == null) {
+				exists = getAccount(ban.person.username) != null;
+				nonexistentCache.put(ban.person.username, exists);
+			}
+			
+			if(!exists) {
+				logger.printf(Level.INFO, "Skipping since that user does not exist");
+				al.append("That person does not exist so actually not banning (likely deleted their account)");
+			}else {
+				handleBanUser(ban);
+				sleepFor(2000);
+			}
+			
 			didSomething = true;
 		}
 		return didSomething;
@@ -526,7 +569,14 @@ public class USLBotDriver extends BotDriver {
 	 * @param banInfo the information regarding the ban
 	 */
 	protected void handleBanUser(UserBanInformation banInfo) {
-		super.handleBanUser(banInfo.subreddit.subreddit, banInfo.person.username, banInfo.banMessage, banInfo.banReason, banInfo.banNote);
+		Boolean res = super.handleBanUser(banInfo.subreddit.subreddit, banInfo.person.username, banInfo.banMessage, banInfo.banReason, banInfo.banNote);
+		if(res == Boolean.FALSE) {
+			sendModmail(banInfo.subreddit.subreddit, "Failed to ban user", 
+					"Hello,\n\nI failed to ban /u/" + banInfo.person.username + " on your subreddit. "
+					+ "This probably means that he is temporarily banned. You should search this user on the website to "
+					+ "figure out why I tried to ban him, then take the appropriate action. Message /u/tjstretchalot "
+					+ "if you are confused.");
+		}
 	}
 	
 	/**

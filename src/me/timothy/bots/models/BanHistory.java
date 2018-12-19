@@ -1,5 +1,7 @@
 package me.timothy.bots.models;
 
+import me.timothy.bots.database.MappingDatabase;
+
 /**
  * Links a person to being banned on a particular subreddit. Subreddits
  * are referred to by monitored subreddit id, through the handled mod
@@ -97,5 +99,12 @@ public class BanHistory {
 		return "BanHistory [id=" + id + ", modPersonID="
 				+ modPersonID + ", bannedPersonID=" + bannedPersonID + ", handledModActionID=" + handledModActionID
 				+ ", banDescription=" + banDescription + ", banDetails=" + banDetails + "]";
+	}
+	
+	public String toPrettyString(MappingDatabase db) {
+		return "[id=" + id + ", mod=" + db.getPersonMapping().fetchByID(modPersonID).username + ", "
+				+ "banned=" + db.getPersonMapping().fetchByID(bannedPersonID).username + ", "
+				+ "description=" + banDescription + ", details=" + banDetails
+				+ ", hma=" + db.getHandledModActionMapping().fetchByID(handledModActionID).toPrettyString(db) + "]";
 	}
 }

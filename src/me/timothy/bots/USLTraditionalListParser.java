@@ -93,7 +93,8 @@ public class USLTraditionalListParser {
 		config.load();
 		
 		USLDatabase database = new USLDatabase();
-		database.connect(config.getProperty("database.username"), config.getProperty("database.password"), config.getProperty("database.url"));
+		database.connect(config.getProperty("database.username"), config.getProperty("database.password"), config.getProperty("database.url"),
+				new File(config.getProperty("database.flat_folder")));
 		database.validateTableState();
 		
 		new USLTraditionalListParser().parseFile(file, (handler) -> {

@@ -3,13 +3,20 @@ package me.timothy.tests.database;
 import static org.junit.Assert.*;
 import static me.timothy.tests.database.mysql.MysqlTestUtils.*;
 
+import java.sql.Timestamp;
 import java.util.List;
 
 import org.junit.Test;
 
 import me.timothy.bots.database.MappingDatabase;
 import me.timothy.bots.database.MonitoredSubredditMapping;
+import me.timothy.bots.models.Hashtag;
 import me.timothy.bots.models.MonitoredSubreddit;
+import me.timothy.bots.models.Person;
+import me.timothy.bots.models.SubscribedHashtag;
+import me.timothy.bots.models.USLAction;
+import me.timothy.tests.DBShortcuts;
+import me.timothy.tests.database.mysql.MysqlTestUtils;
 
 /**
  * Describes a test focused on testing a MonitoredSubredditMapping. The 
@@ -112,5 +119,125 @@ public class MonitoredSubredditMappingTest {
 
 		fromDB = database.getMonitoredSubredditMapping().fetchByName("NotJohnsSub");
 		assertNull(fromDB);
+	}
+	
+	@Test
+	public void testFetchByHashtag() {
+		Person mod = database.getPersonMapping().fetchOrCreateByUsername("mod");
+		
+		Hashtag scammer = new Hashtag(-1, "#scammer", "scammer tag", mod.id, mod.id, new Timestamp(System.currentTimeMillis()), new Timestamp(System.currentTimeMillis()));
+		database.getHashtagMapping().save(scammer);
+		
+		Hashtag sketchy = new Hashtag(-1, "#sketchy", "sketchy tag", mod.id, mod.id, new Timestamp(System.currentTimeMillis()), new Timestamp(System.currentTimeMillis()));
+		database.getHashtagMapping().save(sketchy);
+		
+		List<Integer> fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(scammer.id);
+		MysqlTestUtils.assertListContents(fromDb);
+		
+		MonitoredSubreddit mSub1 = new MonitoredSubreddit(-1, "johnssub", true, false, false);
+		database.getMonitoredSubredditMapping().save(mSub1);
+		
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(scammer.id);
+		MysqlTestUtils.assertListContents(fromDb);
+		
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(sketchy.id);
+		MysqlTestUtils.assertListContents(fromDb);
+		
+		SubscribedHashtag sh = new SubscribedHashtag(-1, mSub1.id, sketchy.id, new Timestamp(System.currentTimeMillis()), null);
+		database.getSubscribedHashtagMapping().save(sh);
+		
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(scammer.id);
+		MysqlTestUtils.assertListContents(fromDb);
+		
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(sketchy.id);
+		MysqlTestUtils.assertListContents(fromDb, mSub1.id);
+		
+		MonitoredSubreddit mSub2 = new MonitoredSubreddit(-1, "paulssub", true, false, false);
+		database.getMonitoredSubredditMapping().save(mSub2);
+
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(scammer.id);
+		MysqlTestUtils.assertListContents(fromDb);
+		
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(sketchy.id);
+		MysqlTestUtils.assertListContents(fromDb, mSub1.id);
+		
+		SubscribedHashtag sh2 = new SubscribedHashtag(-1, mSub2.id, sketchy.id, new Timestamp(System.currentTimeMillis()), null);
+		database.getSubscribedHashtagMapping().save(sh2);
+
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(scammer.id);
+		MysqlTestUtils.assertListContents(fromDb);
+		
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(sketchy.id);
+		MysqlTestUtils.assertListContents(fromDb, mSub1.id, mSub2.id);
+		
+		SubscribedHashtag sh3 = new SubscribedHashtag(-1, mSub2.id, scammer.id, new Timestamp(System.currentTimeMillis()), null);
+		database.getSubscribedHashtagMapping().save(sh3);
+		
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(scammer.id);
+		MysqlTestUtils.assertListContents(fromDb, mSub2.id);
+		
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(sketchy.id);
+		MysqlTestUtils.assertListContents(fromDb, mSub1.id, mSub2.id);
+		
+		sh3.deletedAt = new Timestamp(System.currentTimeMillis());
+		database.getSubscribedHashtagMapping().save(sh3);
+		
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(scammer.id);
+		MysqlTestUtils.assertListContents(fromDb);
+		
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(sketchy.id);
+		MysqlTestUtils.assertListContents(fromDb, mSub1.id, mSub2.id);
+		
+		SubscribedHashtag sh4 = new SubscribedHashtag(-1, mSub2.id, scammer.id, new Timestamp(System.currentTimeMillis() + 5000), null);
+		database.getSubscribedHashtagMapping().save(sh4);
+		
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(scammer.id);
+		MysqlTestUtils.assertListContents(fromDb, mSub2.id);
+		
+		fromDb = database.getMonitoredSubredditMapping().fetchIDsThatFollow(sketchy.id);
+		MysqlTestUtils.assertListContents(fromDb, mSub1.id, mSub2.id);
+	}
+	
+	@Test
+	public void testFetchByActionTags() {
+		MonitoredSubredditMapping map = database.getMonitoredSubredditMapping();
+		DBShortcuts db = new DBShortcuts(database);
+		
+		MonitoredSubreddit sub = db.sub();
+		MonitoredSubreddit sub2 = db.sub2();
+		
+		Person banned = db.user1();
+		
+		Hashtag scammer = db.scammerTag();
+		Hashtag sketchy = db.sketchyTag();
+		
+		USLAction act = db.action(true, banned, new Hashtag[] { scammer }, null, null);
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act.id));
+		
+		db.attach(sub2, scammer);
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act.id), sub2.id);
+		
+		db.attach(sub, sketchy);
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act.id), sub2.id);
+		
+		USLAction act2 = db.action(true, banned, new Hashtag[] { sketchy }, null, null);
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act.id), sub2.id);
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act2.id), sub.id);
+		
+		USLAction act3 = db.action(true, banned, new Hashtag[] { scammer, sketchy }, null, null);
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act.id), sub2.id);
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act2.id), sub.id);
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act3.id), sub.id, sub2.id);
+		
+		db.attach(sub2, sketchy);
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act.id), sub2.id);
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act2.id), sub.id, sub2.id);
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act3.id), sub.id, sub2.id);
+		
+		sub2.writeOnly = true;
+		database.getMonitoredSubredditMapping().save(sub2);
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act.id));
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act2.id), sub.id);
+		MysqlTestUtils.assertListContents(map.fetchReadableIDsThatFollowActionsTags(act3.id), sub.id);
 	}
 }

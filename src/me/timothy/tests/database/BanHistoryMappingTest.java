@@ -16,6 +16,9 @@ import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.HandledModAction;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
+import me.timothy.bots.models.USLAction;
+import me.timothy.bots.models.USLActionBanHistory;
+import me.timothy.bots.models.UnbanHistory;
 import me.timothy.tests.database.mysql.MysqlTestUtils;
 
 /**
@@ -254,5 +257,55 @@ public class BanHistoryMappingTest {
 		
 		fromDB = database.getBanHistoryMapping().fetchBanHistoriesByPerson(eric.id);
 		MysqlTestUtils.assertListContents(fromDB, paulBansEricBH);
+	}
+	
+	@Test
+	public void testFetchByActionAndSubreddit() {
+		final long now = System.currentTimeMillis();
+		Person mod = database.getPersonMapping().fetchOrCreateByUsername("mod");
+		Person mod2 = database.getPersonMapping().fetchOrCreateByUsername("mod2");
+		Person banned = database.getPersonMapping().fetchOrCreateByUsername("banned");
+		
+		MonitoredSubreddit sub1 = new MonitoredSubreddit(-1, "sub1", true, false, false);
+		database.getMonitoredSubredditMapping().save(sub1);
+		
+		MonitoredSubreddit sub2 = new MonitoredSubreddit(-1, "sub2", true, false, false);
+		database.getMonitoredSubredditMapping().save(sub2);
+		
+		
+		HandledModAction hma1 = new HandledModAction(-1, sub1.id, "ModAction_ID1", new Timestamp(now));
+		database.getHandledModActionMapping().save(hma1);
+		
+		BanHistory ban1 = new BanHistory(-1, mod.id, banned.id, hma1.id, "#scammer", "permanent");
+		database.getBanHistoryMapping().save(ban1);
+		
+		HandledModAction hma2 = new HandledModAction(-1, sub2.id, "ModAction_ID2", new Timestamp(now));
+		database.getHandledModActionMapping().save(hma2);
+		
+		BanHistory ban2 = new BanHistory(-1, mod2.id, banned.id, hma2.id, "#scammer", "permanent");
+		database.getBanHistoryMapping().save(ban2);
+		
+		HandledModAction hma3 = new HandledModAction(-1, sub2.id, "ModAction_ID3", new Timestamp(now));
+		database.getHandledModActionMapping().save(hma3);
+		
+		UnbanHistory unban1 = new UnbanHistory(-1, mod2.id, banned.id, hma2.id);
+		database.getUnbanHistoryMapping().save(unban1);
+		
+		HandledModAction hma4 = new HandledModAction(-1, sub2.id, "ModAction_ID4", new Timestamp(now));
+		database.getHandledModActionMapping().save(hma4);
+		
+		BanHistory ban3 = new BanHistory(-1, mod2.id, banned.id, hma4.id, "#scammer", "permanent");
+		database.getBanHistoryMapping().save(ban3);
+		
+		USLAction action = database.getUSLActionMapping().create(true, banned.id, new Timestamp(now));
+		
+		database.getUSLActionBanHistoryMapping().save(new USLActionBanHistory(action.id, ban1.id));
+		database.getUSLActionBanHistoryMapping().save(new USLActionBanHistory(action.id, ban3.id));
+		
+		BanHistory fromDb = database.getBanHistoryMapping().fetchByActionAndSubreddit(action.id, sub1.id);
+		assertEquals(ban1, fromDb);
+		
+		fromDb = database.getBanHistoryMapping().fetchByActionAndSubreddit(action.id, sub2.id);
+		assertEquals(ban3, fromDb);
 	}
 }

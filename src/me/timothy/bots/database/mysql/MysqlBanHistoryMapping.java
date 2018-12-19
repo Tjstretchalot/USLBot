@@ -51,7 +51,7 @@ public class MysqlBanHistoryMapping extends MysqlObjectWithIDMapping<BanHistory>
 			statement.setInt(counter++, banHistory.modPersonID);
 			statement.setInt(counter++, banHistory.bannedPersonID);
 			statement.setInt(counter++, banHistory.handledModActionID);
-			statement.setString(counter++, banHistory.banDescription);
+			statement.setString(counter++, (banHistory.banDescription == null || banHistory.banDescription.isEmpty()) ? null : banHistory.banDescription);
 			statement.setString(counter++, banHistory.banDetails);
 			
 			if(banHistory.id > 0) {
@@ -163,12 +163,53 @@ public class MysqlBanHistoryMapping extends MysqlObjectWithIDMapping<BanHistory>
 						), 
 				fetchListFromSetFunction());
 	}
+
+	@Override
+	public BanHistory fetchByActionAndSubreddit(int uslActionId, int subredditId) {
+		try(PreparedStatement statement = connection.prepareStatement(
+				"SELECT ban_histories.id, ban_histories.mod_person_id, ban_histories.banned_person_id, ban_histories.handled_modaction_id, "
+				+ "ban_histories.ban_description, ban_histories.ban_details FROM "
+				+ "usl_action_ban_history "
+				+ "INNER JOIN ban_histories ON usl_action_ban_history.usl_action_id = ? AND usl_action_ban_history.ban_history_id = ban_histories.id "
+				+ "INNER JOIN handled_modactions ON ban_histories.handled_modaction_id = handled_modactions.id AND "
+				+ "handled_modactions.monitored_subreddit_id = ?")) {
+			statement.setInt(1, uslActionId);
+			statement.setInt(2, subredditId);
+			try (ResultSet set = statement.executeQuery()) {
+				if(!set.next())
+					return null;
+				
+				BanHistory res = new BanHistory(set.getInt(1), set.getInt(2), set.getInt(3), set.getInt(4), set.getString(5), set.getString(6));
+				if(set.next()) {
+					String query = "SELECT ban_histories.id, ban_histories.mod_person_id, ban_histories.banned_person_id, ban_histories.handled_modaction_id, "
+							+ "ban_histories.ban_description, ban_histories.ban_details FROM "
+							+ "usl_action_ban_history "
+							+ "INNER JOIN ban_histories ON usl_action_ban_history.usl_action_id = " + uslActionId + " AND usl_action_ban_history.ban_history_id = ban_histories.id "
+							+ "INNER JOIN handled_modactions ON ban_histories.handled_modaction_id = handled_modactions.id AND "
+							+ "handled_modactions.monitored_subreddit_id = " + subredditId;
+					throw new RuntimeException("shouldnt have more! Full query: " + query);
+				}
+				if(res.banDescription == null)
+					res.banDescription = "";
+				
+				return res;
+			}
+		}catch(SQLException e) {
+			logger.throwing(e);
+			throw new RuntimeException(e);
+		}
+	}
 	
 	@Override
 	protected BanHistory fetchFromSet(ResultSet set) throws SQLException {
-		return new BanHistory(set.getInt("id"), set.getInt("mod_person_id"), 
+		BanHistory res = new BanHistory(set.getInt("id"), set.getInt("mod_person_id"), 
 				set.getInt("banned_person_id"), set.getInt("handled_modaction_id"), 
 				set.getString("ban_description"), set.getString("ban_details"));
+		
+		if(res.banDescription == null)
+			res.banDescription = "";
+		
+		return res;
 	}
 	
 	@Override

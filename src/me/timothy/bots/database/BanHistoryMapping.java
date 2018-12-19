@@ -59,4 +59,16 @@ public interface BanHistoryMapping extends ObjectMapping<BanHistory> {
 	 * @return
 	 */
 	public List<BanHistory> fetchBanHistoriesByPersonAndSubreddit(int bannedPersonId, int monitoredSubredditId);
+
+	/**
+	 * This is a merged action. It must lookup each of the ban histories that this is mapped to
+	 * the given action, then figure out the monitored subreddit for the ban history. It then returns
+	 * the ban history that is mapped to the given action that is for the given subreddit. Since
+	 * this is a lookup for a ban history, it is placed in the ban history mapping.
+	 * 
+	 * @param uslActionId the action
+	 * @param subredditId the subreddit you are interested in
+	 * @return the ban history mapped to the given action with the given subreddit id.
+	 */
+	public BanHistory fetchByActionAndSubreddit(int uslActionId, int subredditId);
 }

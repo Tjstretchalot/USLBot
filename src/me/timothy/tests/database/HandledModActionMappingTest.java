@@ -7,9 +7,14 @@ import java.util.List;
 
 import org.junit.Test;
 
+import me.timothy.bots.database.HandledModActionMapping;
 import me.timothy.bots.database.MappingDatabase;
+import me.timothy.bots.memory.HandledModActionJoinHistory;
+import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.HandledModAction;
 import me.timothy.bots.models.MonitoredSubreddit;
+import me.timothy.bots.models.UnbanHistory;
+import me.timothy.tests.DBShortcuts;
 import me.timothy.tests.database.mysql.MysqlTestUtils;
 
 public class HandledModActionMappingTest {
@@ -153,5 +158,105 @@ public class HandledModActionMappingTest {
 
 		fromDB = database.getHandledModActionMapping().fetchLatestForSubreddit(sub.id, new Timestamp(nowRounded - 1000), null, 1);
 		MysqlTestUtils.assertListContents(fromDB, mAction);
+	}
+	
+	@Test
+	public void testFetchLatestJoined() {
+		DBShortcuts db = new DBShortcuts(database);
+		HandledModActionMapping map = database.getHandledModActionMapping();
+		
+		MonitoredSubreddit sub = db.sub();
+		MonitoredSubreddit sub2 = db.sub2();
+		
+		List<HandledModActionJoinHistory> fromDB = map.fetchLatestJoined(db.epoch, db.now(), 10); 
+		assertTrue(fromDB.isEmpty());
+		
+		HandledModAction hma1 = db.hma(sub, db.now(-60000));
+		fromDB = map.fetchLatestJoined(db.epoch, db.now(), 10);
+		assertTrue(fromDB.isEmpty());
+		
+		db.hma(sub, db.now(-55000));
+		fromDB = map.fetchLatestJoined(db.epoch, db.now(), 10);
+		assertTrue(fromDB.isEmpty());
+		
+		BanHistory ban1 = db.bh(db.mod(), db.user1(), hma1, "msg", true);
+		fromDB = map.fetchLatestJoined(db.epoch, db.now(), 10);
+		assertEquals(1, fromDB.size());
+		HandledModActionJoinHistory hmaJH = fromDB.get(0);
+		assertEquals(hma1, hmaJH.handledModAction);
+		assertEquals(ban1, hmaJH.banHistory);
+		assertNull(hmaJH.unbanHistory);
+		assertTrue(hmaJH.isBan());
+		assertFalse(hmaJH.isUnban());
+		
+		db.hma(sub, db.now(-50000));
+		fromDB = map.fetchLatestJoined(db.epoch, db.now(), 10);
+		assertEquals(1, fromDB.size());
+		assertEquals(ban1, hmaJH.banHistory);
+		
+		HandledModAction hma4 = db.hma(sub2, db.now(-65000));
+		BanHistory ban2 = db.bh(db.mod(), db.user1(), hma4, "msg", true);
+		fromDB = map.fetchLatestJoined(db.epoch, db.now(), 10);
+		assertEquals(2, fromDB.size());
+		hmaJH = fromDB.get(0);
+		assertEquals(hma4, hmaJH.handledModAction);
+		assertEquals(ban2, hmaJH.banHistory);
+		assertNull(hmaJH.unbanHistory);
+		assertTrue(hmaJH.isBan());
+		hmaJH = fromDB.get(1);
+		assertEquals(hma1, hmaJH.handledModAction);
+		assertEquals(ban1, hmaJH.banHistory);
+		assertNull(hmaJH.unbanHistory);
+		
+		fromDB = map.fetchLatestJoined(db.epoch, db.now(), 1);
+		assertEquals(1, fromDB.size());
+		hmaJH = fromDB.get(0);
+		assertEquals(hma4, hmaJH.handledModAction);
+		assertEquals(ban2, hmaJH.banHistory);
+		assertNull(hmaJH.unbanHistory);
+		
+		fromDB = map.fetchLatestJoined(db.epoch, db.now(-65000), 1);
+		assertTrue(fromDB.isEmpty());
+
+		fromDB = map.fetchLatestJoined(db.epoch, db.now(-63000), 1);
+		assertEquals(1, fromDB.size());
+		assertEquals(hma4, fromDB.get(0).handledModAction);
+		assertEquals(ban2, fromDB.get(0).banHistory);
+		assertNull(fromDB.get(0).unbanHistory);
+		
+		fromDB = map.fetchLatestJoined(db.now(-65000), db.now(), 1);
+		assertEquals(1, fromDB.size());
+		assertEquals(hma4, fromDB.get(0).handledModAction);
+		assertEquals(ban2, fromDB.get(0).banHistory);
+		assertNull(fromDB.get(0).unbanHistory);
+		
+		fromDB = map.fetchLatestJoined(db.now(-65000), db.now(), 10);
+		assertEquals(2, fromDB.size());
+		assertEquals(hma4, fromDB.get(0).handledModAction);
+		assertEquals(ban2, fromDB.get(0).banHistory);
+		assertNull(fromDB.get(0).unbanHistory);
+		assertEquals(hma1, fromDB.get(1).handledModAction);
+		assertEquals(ban1, fromDB.get(1).banHistory);
+		assertNull(fromDB.get(1).unbanHistory);
+		
+		fromDB = map.fetchLatestJoined(db.now(-60000), db.now(), 10);
+		assertEquals(1, fromDB.size());
+		assertEquals(hma1, fromDB.get(0).handledModAction);
+		assertEquals(ban1, fromDB.get(0).banHistory);
+		assertNull(fromDB.get(0).unbanHistory);
+		
+		HandledModAction hma5 = db.hma(sub2, db.now(-45000));
+		UnbanHistory unban1 = db.ubh(db.mod2(), db.user1(), hma5);
+		fromDB = map.fetchLatestJoined(db.epoch, db.now(), 10);
+		assertEquals(3, fromDB.size());
+		assertEquals(hma4, fromDB.get(0).handledModAction);
+		assertEquals(ban2, fromDB.get(0).banHistory);
+		assertNull(fromDB.get(0).unbanHistory);
+		assertEquals(hma1, fromDB.get(1).handledModAction);
+		assertEquals(ban1, fromDB.get(1).banHistory);
+		assertNull(fromDB.get(1).unbanHistory);
+		assertEquals(hma5, fromDB.get(2).handledModAction);
+		assertNull(fromDB.get(2).banHistory);
+		assertEquals(unban1, fromDB.get(2).unbanHistory);
 	}
 }

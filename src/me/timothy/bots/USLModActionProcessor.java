@@ -17,7 +17,10 @@ import me.timothy.jreddit.info.ModAction;
 /**
  * The goal of this class is to take in a single handled mod action and determine
  * what we should do with it. This must be able to handle recieving the same mod
- * action multiple times in a row without duplicating database rows.
+ * action multiple times in a row without duplicating database rows. This handles
+ * the conversion from an arbitrary mod action to a handled mod action + ban history/
+ * unban history pair. This then passes it on to the USLRedditToMeaningProcessor with
+ * the ban/unban history and handled mod action.
  * 
  * @author Timothy
  */
@@ -76,6 +79,8 @@ public class USLModActionProcessor {
 		
 		BanHistory history = new BanHistory(-1, mod.id, banned.id, hma.id, ma.description(), ma.details());
 		database.getBanHistoryMapping().save(history);
+		
+		
 		
 		// THE REST IS JUST LOGGING
 		

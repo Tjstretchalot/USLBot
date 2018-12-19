@@ -61,4 +61,24 @@ public interface UnbanHistoryMapping extends ObjectMapping<UnbanHistory> {
 	 * @return unban histories with banned user personId and subreddit subredditID
 	 */
 	public List<UnbanHistory> fetchUnbanHistoriesByPersonAndSubreddit(int unbannedPersonId, int monitoredSubredditId);
+
+	/**
+	 * This is a merged action. It must lookup each of the unban histories that this is mapped to
+	 * the given action, then figure out the monitored subreddit for the unban history. It then returns
+	 * the unban history that is mapped to the given action that is for the given subreddit. Since
+	 * this is a lookup for a unban history, it is placed in the unban history mapping.
+	 * 
+	 * @param uslActionId the action
+	 * @param subredditId the subreddit you are interested in
+	 * @return the unban history mapped to the given action with the given subreddit id.
+	 */
+	public UnbanHistory fetchByActionAndSubreddit(int uslActionId, int subredditId);
+	
+	/**
+	 * Fetch all unbans for the given person. This is hard to use directly.
+	 * 
+	 * @param personId the person you are interested
+	 * @return all unbans with the specified unbanned person id
+	 */
+	public List<UnbanHistory> fetchByPerson(int personId);
 }

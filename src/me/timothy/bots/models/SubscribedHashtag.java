@@ -2,6 +2,8 @@ package me.timothy.bots.models;
 
 import java.sql.Timestamp;
 
+import me.timothy.bots.database.MappingDatabase;
+
 /**
  * Subreddits are allowed to specify what to do in the event the
  * USLBot recieves a new ban message. This is done with 
@@ -26,12 +28,15 @@ import java.sql.Timestamp;
  * These hashtags are never updated. They can be flagged deleted by
  * setting the deletedAt to a non-null timestamp.
  * 
+ * These used to be directly string literals, but now we go through a hashtag mapping layer for 
+ * performance reasons and to improve coordination between subreddits.
+ * 
  * @author Timothy
  */
 public class SubscribedHashtag {
 	public int id;
 	public int monitoredSubredditID;
-	public String hashtag;
+	public int hashtagID;
 	public Timestamp createdAt;
 	public Timestamp deletedAt;
 	
@@ -40,16 +45,16 @@ public class SubscribedHashtag {
 	 * 
 	 * @param id id (or -1 if not in database)
 	 * @param monitoredSubredditID relevant monitored subreddit id
-	 * @param hashtag the string literal
+	 * @param hashtagID the id of the hashtag
 	 * @param createdAt created at timestamp
 	 * @param deletedAt deleted at timestamp (or null if not deleted)
 	 */
-	public SubscribedHashtag(int id, int monitoredSubredditID, String hashtag, Timestamp createdAt,
+	public SubscribedHashtag(int id, int monitoredSubredditID, int hashtagID, Timestamp createdAt,
 			Timestamp deletedAt) {
 		super();
 		this.id = id;
 		this.monitoredSubredditID = monitoredSubredditID;
-		this.hashtag = hashtag;
+		this.hashtagID = hashtagID;
 		this.createdAt = createdAt;
 		this.deletedAt = deletedAt;
 	}
@@ -60,7 +65,7 @@ public class SubscribedHashtag {
 	 * @return if this entry matches a sanity check
 	 */
 	public boolean isValid() {
-		return monitoredSubredditID > 0 && hashtag != null && createdAt != null;
+		return monitoredSubredditID > 0 && hashtagID > 0 && createdAt != null;
 	}
 
 	@Override
@@ -69,7 +74,7 @@ public class SubscribedHashtag {
 		int result = 1;
 		result = prime * result + ((createdAt == null) ? 0 : createdAt.hashCode());
 		result = prime * result + ((deletedAt == null) ? 0 : deletedAt.hashCode());
-		result = prime * result + ((hashtag == null) ? 0 : hashtag.hashCode());
+		result = prime * result + hashtagID;
 		result = prime * result + id;
 		result = prime * result + monitoredSubredditID;
 		return result;
@@ -94,10 +99,7 @@ public class SubscribedHashtag {
 				return false;
 		} else if (!deletedAt.equals(other.deletedAt))
 			return false;
-		if (hashtag == null) {
-			if (other.hashtag != null)
-				return false;
-		} else if (!hashtag.equals(other.hashtag))
+		if (hashtagID != other.hashtagID)
 			return false;
 		if (id != other.id)
 			return false;
@@ -108,9 +110,12 @@ public class SubscribedHashtag {
 
 	@Override
 	public String toString() {
-		return "SubscribedHashtag [id=" + id + ", monitoredSubredditID=" + monitoredSubredditID + ", hashtag=" + hashtag
-				+ ", createdAt=" + createdAt + ", deletedAt=" + deletedAt + "]";
+		return "SubscribedHashtag [id=" + id + ", monitoredSubredditID=" + monitoredSubredditID + ", hashtag_id="
+				+ hashtagID + ", createdAt=" + createdAt + ", deletedAt=" + deletedAt + "]";
 	}
-	
-	
+
+	public String toPrettyString(MappingDatabase db) {
+		return "SubsTag [id=" + id + ", sub=" + db.getMonitoredSubredditMapping().fetchByID(this.monitoredSubredditID).subreddit
+				+ ", hashtag=" + db.getHashtagMapping().fetchByID(hashtagID) + "]"; 
+	}
 }

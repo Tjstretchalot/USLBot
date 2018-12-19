@@ -10,7 +10,9 @@ import java.util.List;
 import org.junit.Test;
 
 import me.timothy.bots.database.MappingDatabase;
+import me.timothy.bots.models.Hashtag;
 import me.timothy.bots.models.MonitoredSubreddit;
+import me.timothy.bots.models.Person;
 import me.timothy.bots.models.SubscribedHashtag;
 import me.timothy.tests.database.mysql.MysqlTestUtils;
 
@@ -52,10 +54,15 @@ public class SubscribedHashtagMappingTest {
 		final String testSubredd = "7Q73fVc8uaFkaa8";
 		final long now = System.currentTimeMillis();
 		
+		Person tj = database.getPersonMapping().fetchOrCreateByUsername("tjstretchalot");
+		
 		MonitoredSubreddit monSub = new MonitoredSubreddit(-1, testSubredd, true, false, false);
 		database.getMonitoredSubredditMapping().save(monSub);
 		
-		SubscribedHashtag hashtag = new SubscribedHashtag(-1, monSub.id, testHashtag, new Timestamp(now), null);
+		Hashtag testHashtagInst = new Hashtag(-1, testHashtag, "none", tj.id, tj.id, new Timestamp(now), new Timestamp(now));
+		database.getHashtagMapping().save(testHashtagInst);
+		
+		SubscribedHashtag hashtag = new SubscribedHashtag(-1, monSub.id, testHashtagInst.id, new Timestamp(now), null);
 		database.getSubscribedHashtagMapping().save(hashtag);
 		
 		assertTrue(hashtag.id > 0);
@@ -81,17 +88,27 @@ public class SubscribedHashtagMappingTest {
 		final String testSubredd = "o002aQHGNhKXog5";
 		final String testSubredd2 = "i5YD2Hw39SrA6g4";
 		final long now = System.currentTimeMillis();
-
+		
+		Person fox = database.getPersonMapping().fetchOrCreateByUsername("FoxK56");
+		
+		
+		Hashtag testHashtagInst = new Hashtag(-1, testHashtag, "none1", fox.id, fox.id, new Timestamp(now), new Timestamp(now));
+		database.getHashtagMapping().save(testHashtagInst);
+		Hashtag testHashtag2Inst = new Hashtag(-1, testHashtag2, "none2", fox.id, fox.id, new Timestamp(now), new Timestamp(now));
+		database.getHashtagMapping().save(testHashtag2Inst);
+		Hashtag testHashtag3Inst = new Hashtag(-1, testHashtag3, "none3", fox.id, fox.id, new Timestamp(now), new Timestamp(now));
+		database.getHashtagMapping().save(testHashtag3Inst);
+		
 		MonitoredSubreddit monSub = new MonitoredSubreddit(-1, testSubredd, true, false, false);
 		database.getMonitoredSubredditMapping().save(monSub);
 
-		SubscribedHashtag hashtag = new SubscribedHashtag(-1, monSub.id, testHashtag, new Timestamp(now), null);
+		SubscribedHashtag hashtag = new SubscribedHashtag(-1, monSub.id, testHashtagInst.id, new Timestamp(now), null);
 		database.getSubscribedHashtagMapping().save(hashtag);
 		
 		List<SubscribedHashtag> fromDb = database.getSubscribedHashtagMapping().fetchForSubreddit(monSub.id, false);
 		MysqlTestUtils.assertListContents(fromDb, hashtag);
 		
-		SubscribedHashtag hashtag2 = new SubscribedHashtag(-1, monSub.id, testHashtag2, new Timestamp(now), null);
+		SubscribedHashtag hashtag2 = new SubscribedHashtag(-1, monSub.id, testHashtag2Inst.id, new Timestamp(now), null);
 		database.getSubscribedHashtagMapping().save(hashtag2);
 		
 		fromDb = database.getSubscribedHashtagMapping().fetchForSubreddit(monSub.id, false);
@@ -112,7 +129,7 @@ public class SubscribedHashtagMappingTest {
 		MonitoredSubreddit monSub2 = new MonitoredSubreddit(-1, testSubredd2, false, true, false);
 		database.getMonitoredSubredditMapping().save(monSub2);
 		
-		SubscribedHashtag hashtag3 = new SubscribedHashtag(-1, monSub2.id, testHashtag3, new Timestamp(now), null);
+		SubscribedHashtag hashtag3 = new SubscribedHashtag(-1, monSub2.id, testHashtag3Inst.id, new Timestamp(now), null);
 		database.getSubscribedHashtagMapping().save(hashtag3);
 		
 		fromDb = database.getSubscribedHashtagMapping().fetchForSubreddit(monSub.id, false);

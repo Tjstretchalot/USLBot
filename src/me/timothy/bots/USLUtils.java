@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 
 import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.HandledModAction;
+import me.timothy.bots.models.Hashtag;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.SubscribedHashtag;
 import me.timothy.bots.models.UnbanHistory;
@@ -32,7 +33,8 @@ public class USLUtils {
 		List<SubscribedHashtag> relevant = new ArrayList<>();
 		List<SubscribedHashtag> hashtags = database.getSubscribedHashtagMapping().fetchForSubreddit(subreddit.id, false);
 		for(SubscribedHashtag tag : hashtags) {
-			if(descriptionLower.contains(tag.hashtag.toLowerCase())) {
+			Hashtag realTag = database.getHashtagMapping().fetchByID(tag.hashtagID);
+			if(descriptionLower.contains(realTag.tag.toLowerCase())) {
 				relevant.add(tag);
 			}
 		}
@@ -45,8 +47,8 @@ public class USLUtils {
 	 * @param tags the tags
 	 * @return the tags as a string
 	 */
-	public static String combineTagsWithCommas(List<SubscribedHashtag> tags) {
-		return String.join(", ", tags.stream().map(tag -> tag.hashtag).collect(Collectors.toList()));
+	public static String combineTagsWithCommas(List<Hashtag> tags) {
+		return String.join(", ", tags.stream().map(tag -> tag.tag).collect(Collectors.toList()));
 	}
 
 	

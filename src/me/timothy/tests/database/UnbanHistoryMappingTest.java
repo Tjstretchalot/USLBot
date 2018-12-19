@@ -11,6 +11,8 @@ import me.timothy.bots.database.MappingDatabase;
 import me.timothy.bots.models.HandledModAction;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
+import me.timothy.bots.models.USLAction;
+import me.timothy.bots.models.USLActionUnbanHistory;
 import me.timothy.bots.models.UnbanHistory;
 import me.timothy.tests.database.mysql.MysqlTestUtils;
 
@@ -152,4 +154,37 @@ public class UnbanHistoryMappingTest {
 		assertEquals(johnUnbansPaul3, fromDB);
 	}
 	
+	@Test
+	public void testFetchByActionAndSubreddit() {
+		final long now = System.currentTimeMillis();
+		Person mod = database.getPersonMapping().fetchOrCreateByUsername("mod");
+		Person mod2 = database.getPersonMapping().fetchOrCreateByUsername("mod2");
+		Person banned = database.getPersonMapping().fetchOrCreateByUsername("banned");
+		
+		MonitoredSubreddit sub1 = new MonitoredSubreddit(-1, "sub1", true, false, false);
+		database.getMonitoredSubredditMapping().save(sub1);
+		
+		MonitoredSubreddit sub2 = new MonitoredSubreddit(-1, "sub2", true, false, false);
+		database.getMonitoredSubredditMapping().save(sub2);
+		
+		HandledModAction hma1 = new HandledModAction(-1, sub1.id, "ModAction_ID1", new Timestamp(now));
+		database.getHandledModActionMapping().save(hma1);
+		
+		UnbanHistory unban1 = new UnbanHistory(-1, mod.id, banned.id, hma1.id);
+		database.getUnbanHistoryMapping().save(unban1);
+		
+		HandledModAction hma2 = new HandledModAction(-1, sub2.id, "ModAction_ID2", new Timestamp(now));
+		database.getHandledModActionMapping().save(hma2);
+		
+		UnbanHistory unban2 = new UnbanHistory(-1, mod2.id, banned.id, hma2.id);
+		database.getUnbanHistoryMapping().save(unban2);
+		
+		USLAction action = database.getUSLActionMapping().create(false, banned.id, new Timestamp(now));
+		
+		database.getUSLActionUnbanHistoryMapping().save(new USLActionUnbanHistory(action.id, unban1.id));
+		database.getUSLActionUnbanHistoryMapping().save(new USLActionUnbanHistory(action.id, unban2.id));
+		
+		assertEquals(unban1, database.getUnbanHistoryMapping().fetchByActionAndSubreddit(action.id, sub1.id));
+		assertEquals(unban2, database.getUnbanHistoryMapping().fetchByActionAndSubreddit(action.id, sub2.id));
+	}
 }

@@ -7,6 +7,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
@@ -14,7 +15,10 @@ import org.apache.logging.log4j.Logger;
 
 import me.timothy.bots.USLDatabase;
 import me.timothy.bots.database.HandledModActionMapping;
+import me.timothy.bots.memory.HandledModActionJoinHistory;
+import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.HandledModAction;
+import me.timothy.bots.models.UnbanHistory;
 
 public class MysqlHandledModActionMapping extends MysqlObjectWithIDMapping<HandledModAction> implements HandledModActionMapping {
 	private static final Logger logger = LogManager.getLogger();
@@ -141,6 +145,55 @@ public class MysqlHandledModActionMapping extends MysqlObjectWithIDMapping<Handl
 						new MysqlTypeValueTuple(Types.TIMESTAMP, before),
 						new MysqlTypeValueTuple(Types.INTEGER, num)),
 				fetchListFromSetFunction());
+	}
+
+	@Override
+	public List<HandledModActionJoinHistory> fetchLatestJoined(Timestamp after, Timestamp before, int num) {
+		Timestamp fixedAfter = new Timestamp(after.getTime());
+		fixedAfter.setNanos(0);
+		
+		Timestamp fixedBefore = new Timestamp(before.getTime());
+		fixedBefore.setNanos(0);
+		
+		try(PreparedStatement statement = connection.prepareStatement("SELECT handled_modactions.id, handled_modactions.monitored_subreddit_id, handled_modactions.modaction_id, "
+				+ "handled_modactions.occurred_at, ban_histories.id, ban_histories.mod_person_id, ban_histories.banned_person_id, "
+				+ "ban_histories.ban_description, ban_histories.ban_details, unban_histories.id, unban_histories.mod_person_id, "
+				+ "unban_histories.unbanned_person_id "
+				+ "FROM (SELECT * FROM handled_modactions ORDER BY handled_modactions.occurred_at ASC) handled_modactions "
+				+ "LEFT JOIN ban_histories ON handled_modactions.id = ban_histories.handled_modaction_id "
+				+ "LEFT JOIN unban_histories ON handled_modactions.id = unban_histories.handled_modaction_id "
+				+ "WHERE handled_modactions.occurred_at >= ? AND handled_modactions.occurred_at < ? AND (ban_histories.id IS NOT NULL OR unban_histories.id IS NOT NULL) "
+				+ "ORDER BY handled_modactions.occurred_at ASC LIMIT ?")) {
+			statement.setTimestamp(1, fixedAfter);
+			statement.setTimestamp(2, fixedBefore);
+			statement.setInt(3, num);
+			
+			try(ResultSet set = statement.executeQuery()) {
+				List<HandledModActionJoinHistory> result = new ArrayList<>();
+				while(set.next()) {
+					HandledModAction hma = new HandledModAction(set.getInt(1), set.getInt(2), set.getString(3), set.getTimestamp(4));
+					set.getInt(5);
+					if(set.wasNull()) {
+						// Unban
+						result.add(new HandledModActionJoinHistory(hma, null, new UnbanHistory(
+								set.getInt(10), set.getInt(11), set.getInt(12), hma.id)));
+					}else {
+						// Ban
+						BanHistory bh = new BanHistory(
+								set.getInt(5), set.getInt(6), set.getInt(7), hma.id, set.getString(8), set.getString(9));
+						
+						if(bh.banDescription == null)
+							bh.banDescription = "";
+						
+						result.add(new HandledModActionJoinHistory(hma, bh, null));
+					}
+				}
+				return result;
+			}
+		}catch(SQLException e) {
+			logger.throwing(e);
+			throw new RuntimeException(e);
+		}
 	}
 
 }

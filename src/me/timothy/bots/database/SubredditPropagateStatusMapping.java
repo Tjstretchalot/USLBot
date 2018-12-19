@@ -9,11 +9,18 @@ import me.timothy.bots.models.SubredditPropagateStatus;
  */
 public interface SubredditPropagateStatusMapping extends ObjectMapping<SubredditPropagateStatus> {
 	/**
-	 * Fetches the subreddit propagate status for the major sub when it comes
-	 * to propagating actions from the specified minor sub
+	 * Fetch the propagate status for the given subreddit
 	 * 
-	 * @param majorSubID the major sub
-	 * @param minorSubID the minor sub
+	 * @param monitoredSubredditID the subreddit whose status you want
+	 * @return the propagate status for that subreddit
 	 */
-	public SubredditPropagateStatus fetchForSubredditPair(int majorSubID, int minorSubID);
+	public SubredditPropagateStatus fetchForSubreddit(int monitoredSubredditID);
+	
+	/**
+	 * Fetch or create the propagate status for the given subreddit. This creates it with
+	 * the actionID 
+	 * @param monitoredSubredditID
+	 * @return
+	 */
+	public SubredditPropagateStatus fetchOrCreateForSubreddit(int monitoredSubredditID);
 }

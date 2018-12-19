@@ -8,8 +8,10 @@ import java.util.List;
 import org.junit.Test;
 
 import me.timothy.bots.database.MappingDatabase;
+import me.timothy.bots.database.UnbanRequestMapping;
 import me.timothy.bots.models.Person;
 import me.timothy.bots.models.UnbanRequest;
+import me.timothy.tests.DBShortcuts;
 import me.timothy.tests.database.mysql.MysqlTestUtils;
 
 public class UnbanRequestMappingTest {
@@ -158,4 +160,54 @@ public class UnbanRequestMappingTest {
 		fromDB = database.getUnbanRequestMapping().fetchLatestValidByBannedPerson(paul.id);
 		assertEquals(req3, fromDB);
 	}
+	
+	@Test
+	public void testFetchLatest() {
+		DBShortcuts db = new DBShortcuts(database);
+		UnbanRequestMapping map = database.getUnbanRequestMapping();
+		
+		List<UnbanRequest> fromDB = map.fetchLatestValid(db.epoch, db.now(), 10);
+		assertTrue(fromDB.isEmpty());
+		
+		UnbanRequest req1 = db.unbanRequest(db.user1(), db.now(-60000));
+		fromDB = map.fetchLatestValid(db.epoch, db.now(), 10);
+		assertTrue(fromDB.isEmpty());
+		
+		db.handle(req1, db.now(-55000), true);
+		fromDB = map.fetchLatestValid(db.epoch, db.now(), 10);
+		assertTrue(fromDB.isEmpty());
+		
+		UnbanRequest req2 = db.unbanRequest(db.user1(), db.now(-50000));
+		fromDB = map.fetchLatestValid(db.epoch, db.now(), 10);
+		
+		db.handle(req2, db.now(-45000), false);
+		fromDB = map.fetchLatestValid(db.epoch, db.now(), 10);
+		assertEquals(1, fromDB.size());
+		assertEquals(req2, fromDB.get(0));
+		
+		fromDB = map.fetchLatestValid(db.now(-50000), db.now(), 10);
+		assertEquals(1, fromDB.size());
+		assertEquals(req2, fromDB.get(0));
+		
+		fromDB = map.fetchLatestValid(db.now(-5000), db.now(), 10);
+		assertTrue(fromDB.isEmpty());
+		
+		UnbanRequest req3 = db.unbanRequest(db.user1(), db.now(-50000));
+		db.handle(req3, db.now(-48000), false);
+		
+		fromDB = map.fetchLatestValid(db.epoch, db.now(), 10);
+		assertEquals(2, fromDB.size());
+		assertEquals(req3, fromDB.get(0));
+		assertEquals(req2, fromDB.get(1));
+		
+		fromDB = map.fetchLatestValid(db.epoch, db.now(), 1);
+		assertEquals(1, fromDB.size());
+		assertEquals(req3, fromDB.get(0));
+
+		
+		fromDB = map.fetchLatestValid(db.now(-46000), db.now(), 10);
+		assertEquals(1, fromDB.size());
+		assertEquals(req2, fromDB.get(0));
+	}
+	
 }

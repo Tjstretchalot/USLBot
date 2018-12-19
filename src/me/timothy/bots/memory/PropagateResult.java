@@ -1,10 +1,10 @@
 package me.timothy.bots.memory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
-import me.timothy.bots.models.HandledModAction;
-import me.timothy.bots.models.MonitoredSubreddit;
+import me.timothy.bots.models.USLAction;
 
 /**
  * This class is used by the USLPropagator to describe
@@ -21,24 +21,23 @@ import me.timothy.bots.models.MonitoredSubreddit;
  * @author Timothy
  */
 public class PropagateResult {
-	
-	/**
-	 * Which subreddit was considered when creating this result.
+	/***
+	 * The action that was considered.
 	 * Not null.
 	 */
-	public final MonitoredSubreddit subreddit;
-	
-	/**
-	 * Which handled mod action was considered when creating this result.
-	 * Not null.
-	 */
-	public final HandledModAction handledModAction;
+	public final USLAction action;
 	
 	/**
 	 * The list of bans that should take place due to this one.
 	 * Not null.
 	 */
 	public final List<UserBanInformation> bans;
+	
+	/**
+	 * What unbans, if any, need to be performed as a result of this action.
+	 * Not null
+	 */
+	public final List<UserUnbanInformation> unbans;
 	
 	/** 
 	 * The list of pms that should be sent to subreddits.
@@ -51,108 +50,154 @@ public class PropagateResult {
 	 * Not null.
 	 */
 	public final List<UserPMInformation> userPMs;
-
-	/** 
-	 * If we can't figure out what to do yet 
-	 */
-	public final boolean postpone;
 	
 	/**
-	 * @param subreddit subreddit was considered to create this
-	 * @param handledModAction action that was considered to create this
+	 * @param action the usl action that was considered
 	 * @param bans the bans that need to occur because of this
 	 * @param modmailPMs the modmail pms that need to occur because of this
 	 * @param userPMs the users to pm because of this
-	 * @param postpone true if we dont know what to do yet
 	 */
-	public PropagateResult(MonitoredSubreddit subreddit, HandledModAction handledModAction, List<UserBanInformation> bans,
-			List<ModmailPMInformation> modmailPMs, List<UserPMInformation> userPMs, boolean postpone) {
-		this.subreddit = subreddit;
-		this.handledModAction = handledModAction;
+	public PropagateResult(USLAction action, List<UserBanInformation> bans,
+			List<UserUnbanInformation> unbans, List<ModmailPMInformation> modmailPMs, 
+			List<UserPMInformation> userPMs) {
+		this.action = action;
 		this.bans = bans;
+		this.unbans = unbans;
 		this.modmailPMs = modmailPMs;
 		this.userPMs = userPMs;
-		this.postpone = postpone;
 	}
 
 	/**
 	 * Create a ban history propagate result that does nothing
 	 * 
-	 * @param subreddit the subreddit that was considered
-	 * @param handledModAction the action that was considered
+	 * @param action the action that was considered
 	 */
-	public PropagateResult(MonitoredSubreddit subreddit, HandledModAction handledModAction) {
-		this(subreddit, handledModAction, new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), false);
+	public PropagateResult(USLAction action) {
+		this(action, Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
 	}
-
+	
 	/**
-	 * Create a ban history propagate result that does nothing and postpones
+	 * Create a new propagation result that is this one merged with the other one. This
+	 * is optimized for the case where one propagate result is fairly empty.
 	 * 
-	 * @param subreddit the subreddit that was considered
-	 * @param handledModAction the action that was considered
-	 * @param postpone true if we dont know what to do yet
+	 * @param other the propagation result to merge with
+	 * @return this result combined with the other result.
 	 */
-	public PropagateResult(MonitoredSubreddit subreddit, HandledModAction handledModAction, boolean postpone) {
-		this(subreddit, handledModAction, new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), postpone);
+	public PropagateResult merge(PropagateResult other) {
+		List<UserBanInformation> newBans;
+		List<UserUnbanInformation> newUnbans;
+		List<ModmailPMInformation> newModPMs;
+		List<UserPMInformation> newUserPMs;
+		
+		if(bans.isEmpty()) {
+			newBans = other.bans;
+		}else if(other.bans.isEmpty())
+		{
+			newBans = bans;
+		}else {
+			newBans = new ArrayList<>(bans.size() + other.bans.size());
+			newBans.addAll(bans);
+			newBans.addAll(other.bans);
+		}
+		
+		if(unbans.isEmpty()) {
+			newUnbans = other.unbans;
+		}else if(other.unbans.isEmpty()) {
+			newUnbans = unbans;
+		}else {
+			newUnbans = new ArrayList<>(unbans.size() + other.unbans.size());
+			newUnbans.addAll(unbans);
+			newUnbans.addAll(other.unbans);
+		}
+		
+		if(modmailPMs.isEmpty()) {
+			newModPMs = other.modmailPMs;
+		}else if(other.modmailPMs.isEmpty()) {
+			newModPMs = modmailPMs;
+		}else {
+			newModPMs = new ArrayList<>(modmailPMs.size() + other.modmailPMs.size());
+			newModPMs.addAll(modmailPMs);
+			newModPMs.addAll(other.modmailPMs);
+		}
+		
+		if(userPMs.isEmpty()) {
+			newUserPMs = other.userPMs;
+		}else if(other.userPMs.isEmpty()) {
+			newUserPMs = userPMs;
+		}else {
+			newUserPMs = new ArrayList<>(userPMs.size() + other.userPMs.size());
+			newUserPMs.addAll(userPMs);
+			newUserPMs.addAll(other.userPMs);
+		}
+		
+		return new PropagateResult(action, newBans, newUnbans, newModPMs, newUserPMs);
 	}
 
 	@Override
 	public int hashCode() {
 		final int prime = 31;
 		int result = 1;
+		result = prime * result + ((action == null) ? 0 : action.hashCode());
 		result = prime * result + ((bans == null) ? 0 : bans.hashCode());
-		result = prime * result + ((handledModAction == null) ? 0 : handledModAction.hashCode());
 		result = prime * result + ((modmailPMs == null) ? 0 : modmailPMs.hashCode());
-		result = prime * result + (postpone ? 1231 : 1237);
-		result = prime * result + ((subreddit == null) ? 0 : subreddit.hashCode());
+		result = prime * result + ((unbans == null) ? 0 : unbans.hashCode());
 		result = prime * result + ((userPMs == null) ? 0 : userPMs.hashCode());
 		return result;
 	}
 
 	@Override
 	public boolean equals(Object obj) {
-		if (this == obj)
+		if (this == obj) {
 			return true;
-		if (obj == null)
+		}
+		if (obj == null) {
 			return false;
-		if (!(obj instanceof PropagateResult))
+		}
+		if (getClass() != obj.getClass()) {
 			return false;
+		}
 		PropagateResult other = (PropagateResult) obj;
+		if (action == null) {
+			if (other.action != null) {
+				return false;
+			}
+		} else if (!action.equals(other.action)) {
+			return false;
+		}
 		if (bans == null) {
-			if (other.bans != null)
+			if (other.bans != null) {
 				return false;
-		} else if (!bans.equals(other.bans))
+			}
+		} else if (!bans.equals(other.bans)) {
 			return false;
-		if (handledModAction == null) {
-			if (other.handledModAction != null)
-				return false;
-		} else if (!handledModAction.equals(other.handledModAction))
-			return false;
+		}
 		if (modmailPMs == null) {
-			if (other.modmailPMs != null)
+			if (other.modmailPMs != null) {
 				return false;
-		} else if (!modmailPMs.equals(other.modmailPMs))
+			}
+		} else if (!modmailPMs.equals(other.modmailPMs)) {
 			return false;
-		if (postpone != other.postpone)
-			return false;
-		if (subreddit == null) {
-			if (other.subreddit != null)
+		}
+		if (unbans == null) {
+			if (other.unbans != null) {
 				return false;
-		} else if (!subreddit.equals(other.subreddit))
+			}
+		} else if (!unbans.equals(other.unbans)) {
 			return false;
+		}
 		if (userPMs == null) {
-			if (other.userPMs != null)
+			if (other.userPMs != null) {
 				return false;
-		} else if (!userPMs.equals(other.userPMs))
+			}
+		} else if (!userPMs.equals(other.userPMs)) {
 			return false;
+		}
 		return true;
 	}
 
 	@Override
 	public String toString() {
-		return "PropagateResult [subreddit=" + subreddit + ", handledModAction=" + handledModAction + ", bans=" + bans
-				+ ", modmailPMs=" + modmailPMs + ", userPMs=" + userPMs + ", postpone=" + postpone + "]";
+		return "PropagateResult [action=" + action + ", bans=" + bans + ", unbans=" + unbans + ", modmailPMs="
+				+ modmailPMs + ", userPMs=" + userPMs + "]";
 	}
-	
-	
 }

@@ -1,6 +1,10 @@
 package me.timothy.bots.models;
 
 import java.sql.Timestamp;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+
+import me.timothy.bots.database.MappingDatabase;
 
 /*
  * Originally I set it up that this class was not necessary, because I could
@@ -88,5 +92,10 @@ public class HandledModAction {
 	public String toString() {
 		return "HandledModAction [id=" + id + ", monitoredSubredditID=" + monitoredSubredditID
 				+ ", modActionID=" + modActionID + ", occurredAt=" + occurredAt + "]";
+	}
+	
+	public String toPrettyString(MappingDatabase db) {
+		return "[id=" + id + ", sub=" + db.getMonitoredSubredditMapping().fetchByID(monitoredSubredditID).subreddit 
+				+ ", occurredAt=" + SimpleDateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(occurredAt) + "]";
 	}
 }

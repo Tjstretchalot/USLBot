@@ -71,7 +71,7 @@ public class USLTraditionalScammerHandler {
 
 			
 			if(!subreddit.silent) {
-				String tagsString = USLUtils.combineTagsWithCommas(relevant);
+				String tagsString = USLUtils.combineTagsWithCommas(database.getHashtagMapping().fetchForSubscribed(relevant));
 				
 				ResponseInfo modmailInfo = new ResponseInfo(ResponseInfoFactory.base);
 				modmailInfo.addLongtermString("banned person", scammerPerson.username);

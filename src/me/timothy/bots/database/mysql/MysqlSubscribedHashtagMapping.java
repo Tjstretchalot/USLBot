@@ -22,7 +22,7 @@ public class MysqlSubscribedHashtagMapping extends MysqlObjectWithIDMapping<Subs
 		super(database, connection, "subscribed_hashtags", new MysqlColumn[] {
 			new MysqlColumn(Types.INTEGER, "id", true),	
 			new MysqlColumn(Types.INTEGER, "monitored_subreddit_id"),
-			new MysqlColumn(Types.VARCHAR, "hashtag"),
+			new MysqlColumn(Types.INTEGER, "hashtag_id"),
 			new MysqlColumn(Types.TIMESTAMP, "created_at"),
 			new MysqlColumn(Types.TIMESTAMP, "deleted_at")
 		});
@@ -41,15 +41,15 @@ public class MysqlSubscribedHashtagMapping extends MysqlObjectWithIDMapping<Subs
 		try {
 			if(a.id > 0) {
 				statement = connection.prepareStatement("UPDATE " + table + " SET monitored_subreddit_id=?, "
-						+ "hashtag=?, created_at=?, deleted_at=? WHERE id=?"); 
+						+ "hashtag_id=?, created_at=?, deleted_at=? WHERE id=?"); 
 			}else {
 				statement = connection.prepareStatement("INSERT INTO " + table + 
-						" (monitored_subreddit_id, hashtag, created_at, deleted_at) VALUES(?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
+						" (monitored_subreddit_id, hashtag_id, created_at, deleted_at) VALUES(?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
 			}
 			
 			int counter = 1;
 			statement.setInt(counter++, a.monitoredSubredditID);
-			statement.setString(counter++, a.hashtag);
+			statement.setInt(counter++, a.hashtagID);
 			statement.setTimestamp(counter++, a.createdAt);
 			statement.setTimestamp(counter++, a.deletedAt);
 			
@@ -102,7 +102,7 @@ public class MysqlSubscribedHashtagMapping extends MysqlObjectWithIDMapping<Subs
 	 */
 	@Override
 	protected SubscribedHashtag fetchFromSet(ResultSet set) throws SQLException {
-		return new SubscribedHashtag(set.getInt("id"), set.getInt("monitored_subreddit_id"), set.getString("hashtag"),
+		return new SubscribedHashtag(set.getInt("id"), set.getInt("monitored_subreddit_id"), set.getInt("hashtag_id"),
 				set.getTimestamp("created_at"), set.getTimestamp("deleted_at"));
 	}
 
@@ -112,12 +112,14 @@ public class MysqlSubscribedHashtagMapping extends MysqlObjectWithIDMapping<Subs
 		statement.execute("CREATE TABLE " + table + " ("
 				+ "id INT NOT NULL AUTO_INCREMENT, "
 				+ "monitored_subreddit_id INT NOT NULL, "
-				+ "hashtag VARCHAR(50) NOT NULL, "
+				+ "hashtag_id INT NOT NULL, "
 				+ "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
 				+ "deleted_at TIMESTAMP NULL DEFAULT NULL, "
 				+ "PRIMARY KEY(id), "
 				+ "INDEX ind_subschashtag_monsub_id (monitored_subreddit_id), "
-				+ "FOREIGN KEY (monitored_subreddit_id) REFERENCES monitored_subreddits(id)"
+				+ "INDEX ind_subschashtag_hashtag_id (hashtag_id), "
+				+ "FOREIGN KEY (monitored_subreddit_id) REFERENCES monitored_subreddits(id), "
+				+ "FOREIGN KEY (hashtag_id) REFERENCES hashtags(id)"
 				+ ")");
 		statement.close();
 	}

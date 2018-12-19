@@ -1,60 +1,59 @@
 package me.timothy.bots.models;
 
 import java.sql.Timestamp;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+
+import me.timothy.bots.database.MappingDatabase;
 
 /**
- * Keeps track of what banactions have been considered propagating 
- * *to* a subreddit. This is a one-to-many relationship with 
- * MonitoredSubreddits. 
- * 
- * This database cannot be used without also using the "latest handled"
- * joining table. This is because modactions must be processed forward
- * in time, but timestamps are not granular enough on reddit to be 
- * considered unique.
+ * Keeps track of where we are when it comes to propagating usl actions to a subreddit.
  * 
  * @author Timothy
  */
 public class SubredditPropagateStatus {
+	/** The id of the row in the database, or -1 if not in the database yet. */
 	public int id;
-	public int majorSubredditID;
-	public int minorSubredditID;
-	public Timestamp latestPropagatedActionTime;
+	/** The id of the monitored subreddit that this is referring to */
+	public int monitoredSubredditID;
+	/** 
+	 * The biggest id of the action that we have already propagated to this subreddit. 0 for nothing
+	 * propagated yet
+	 */
+	public int actionID;
+	/** When we last updated this row */
 	public Timestamp updatedAt;
 	
-	
 	/**
-	 * @param id the id in the database (or -1 if not in database)
-	 * @param majorSubredditID the major subreddit (the one doing the propagating for this status)
-	 * @param minorSubredditID the minor subreddit (the one being propagated for this status)
-	 * @param latestPropagatedActionTime the latest timestamp from minor sub that was propagated (or null for none)
-	 * @param updatedAt when it was last updated
+	 * @param id the id of the row in the database, or -1 if not in the database yet
+	 * @param monitoredSubredditID the id of the subreddit this is a status for
+	 * @param actionID the biggest USLAction id that has been propagated to this subreddit. 0 for nothing propagated yet
+	 * @param updatedAt when this row was last updated
 	 */
-	public SubredditPropagateStatus(int id, int majorSubredditID, int minorSubredditID,
-			Timestamp latestPropagatedActionTime, Timestamp updatedAt) {
+	public SubredditPropagateStatus(int id, int monitoredSubredditID, int actionID, Timestamp updatedAt) {
+		super();
 		this.id = id;
-		this.majorSubredditID = majorSubredditID;
-		this.minorSubredditID = minorSubredditID;
-		this.latestPropagatedActionTime = latestPropagatedActionTime;
+		this.monitoredSubredditID = monitoredSubredditID;
+		this.actionID = actionID;
 		this.updatedAt = updatedAt;
 	}
-
+	
 	/**
-	 * Determines if this is a plausible database entry
-	 * 
-	 * @return if this can probably be saved to the database
+	 * Determines if this is in a potentially viable state for saving to the database
+	 * @return if this passes a sanity check
 	 */
 	public boolean isValid() {
-		return majorSubredditID > 0 && minorSubredditID > 0;
+		return monitoredSubredditID > 0;
 	}
-
+	
+	
 	@Override
 	public int hashCode() {
 		final int prime = 31;
 		int result = 1;
+		result = prime * result + actionID;
 		result = prime * result + id;
-		result = prime * result + ((latestPropagatedActionTime == null) ? 0 : latestPropagatedActionTime.hashCode());
-		result = prime * result + majorSubredditID;
-		result = prime * result + minorSubredditID;
+		result = prime * result + monitoredSubredditID;
 		result = prime * result + ((updatedAt == null) ? 0 : updatedAt.hashCode());
 		return result;
 	}
@@ -65,19 +64,14 @@ public class SubredditPropagateStatus {
 			return true;
 		if (obj == null)
 			return false;
-		if (!(obj instanceof SubredditPropagateStatus))
+		if (getClass() != obj.getClass())
 			return false;
 		SubredditPropagateStatus other = (SubredditPropagateStatus) obj;
+		if (actionID != other.actionID)
+			return false;
 		if (id != other.id)
 			return false;
-		if (latestPropagatedActionTime == null) {
-			if (other.latestPropagatedActionTime != null)
-				return false;
-		} else if (!latestPropagatedActionTime.equals(other.latestPropagatedActionTime))
-			return false;
-		if (majorSubredditID != other.majorSubredditID)
-			return false;
-		if (minorSubredditID != other.minorSubredditID)
+		if (monitoredSubredditID != other.monitoredSubredditID)
 			return false;
 		if (updatedAt == null) {
 			if (other.updatedAt != null)
@@ -89,8 +83,13 @@ public class SubredditPropagateStatus {
 
 	@Override
 	public String toString() {
-		return "SubredditPropagateStatus [id=" + id + ", majorSubredditID=" + majorSubredditID + ", minorSubredditID="
-				+ minorSubredditID + ", latestPropagatedActionTime=" + latestPropagatedActionTime + ", updatedAt="
-				+ updatedAt + "]";
+		return "SubredditPropagateStatus [id=" + id + ", monitoredSubredditID=" + monitoredSubredditID + ", actionID="
+				+ actionID + ", updatedAt=" + updatedAt + "]";
+	}
+	
+	public String toPrettyString(MappingDatabase db) {
+		return "[id=" + id + ", sub=" + db.getMonitoredSubredditMapping().fetchByID(monitoredSubredditID).subreddit
+				+ ", actionID=" + actionID 
+				+ ", updatedAt=" + updatedAt == null ? null : SimpleDateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(updatedAt) + "]";
 	}
 }

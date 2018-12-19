@@ -1,5 +1,7 @@
 package me.timothy.bots.models;
 
+import me.timothy.bots.database.MappingDatabase;
+
 /**
  * Links a persons to an unban on a particular subreddit, identified by
  * a modaction. This is so that when our USL information on a user is 
@@ -72,5 +74,11 @@ public class UnbanHistory {
 	public String toString() {
 		return "UnbanHistory [id=" + id + ", modPersonID=" + modPersonID + ", unbannedPersonID=" + unbannedPersonID
 				+ ", handledModActionID=" + handledModActionID + "]";
+	}
+	
+	public String toPrettyString(MappingDatabase db) {
+		return "[id=" + id + ", mod=" + db.getPersonMapping().fetchByID(modPersonID).username 
+				+ ", unbanned=" + db.getPersonMapping().fetchByID(unbannedPersonID).username 
+				+ ", hma=" + db.getHandledModActionMapping().fetchByID(handledModActionID).toPrettyString(db) + "]";
 	}
 }

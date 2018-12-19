@@ -1,6 +1,5 @@
 package me.timothy.bots.database.mysql;
 
-
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
@@ -155,6 +154,27 @@ public abstract class MysqlObjectMapping<A> implements ObjectMapping<A>, SchemaV
 	}
 	
 	/**
+	 * Runs the given statement, setting the given variables if they are given, and ignores the result.
+	 * 
+	 * @param statement the SQL to execute
+	 * @param setVars the variables to set, if any
+	 */
+	protected void runStatement(String statement, PreparedStatementSetVars setVars) {
+		try {
+			PreparedStatement pStatement = connection.prepareStatement(statement);
+			if(setVars != null)
+				setVars.setVars(pStatement);
+			
+			pStatement.execute();
+			pStatement.close();
+		}catch(SQLException e) {
+			logger.error("SQLException occurred on MysqlObjectMapping<A>#runStatement. statement=" + statement + ", table=" + table);
+			logger.throwing(e);
+			throw new RuntimeException(e);
+		}
+	}
+	
+	/**
 	 * Creates a preparedstatement statement, then calls setVars, then executes the prepared statement
 	 * as a query, caches the result of the fetchFunc on that result, then closes the set and prepared
 	 * statement and returns the cached result.
@@ -214,6 +234,47 @@ public abstract class MysqlObjectMapping<A> implements ObjectMapping<A>, SchemaV
 				}
 				return null;
 			}
+		};
+	}
+	
+	/**
+	 * Fetch the int in the first column of the first row of the set. Returns
+	 * null if set.next() returns false.
+	 * 
+	 * @return A statement fetch result that just grabs the id in the first row first column
+	 */
+	protected PreparedStatementFetchResult<Integer> fetchFirstIntFromSetFunction() {
+		return new PreparedStatementFetchResult<Integer>() {
+
+			@Override
+			public Integer fetchResult(ResultSet set) throws SQLException {
+				if(set.next()) {
+					return set.getInt(1);
+				}
+				return null;
+			}
+			
+		};
+	}
+	
+	/**
+	 * Fetch the int in the first column for all the rows in the set. Returns an empty set
+	 * if set.next() returns false on the first call.
+	 * 
+	 * @return A statement fetch result that just grabs all the ints in the first column
+	 */
+	protected PreparedStatementFetchResult<List<Integer>> fetchFirstColumnIntsFromSetFunction() {
+		return new PreparedStatementFetchResult<List<Integer>>() {
+
+			@Override
+			public List<Integer> fetchResult(ResultSet set) throws SQLException {
+				List<Integer> result = new ArrayList<>();
+				while(set.next()) {
+					result.add(set.getInt(1));
+				}
+				return result;
+			}
+			
 		};
 	}
 	
@@ -278,6 +339,17 @@ public abstract class MysqlObjectMapping<A> implements ObjectMapping<A>, SchemaV
 		try {
 			Statement statement = connection.createStatement();
 			statement.execute("DROP TABLE IF EXISTS " + table);
+			statement.close();
+		}catch(SQLException ex) {
+			logger.throwing(ex);
+			throw new RuntimeException(ex);
+		}
+	}
+	
+	public void truncate() {
+		try {
+			Statement statement = connection.createStatement();
+			statement.execute("TRUNCATE TABLE " + table);
 			statement.close();
 		}catch(SQLException ex) {
 			logger.throwing(ex);

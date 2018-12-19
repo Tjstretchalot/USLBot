@@ -6,6 +6,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
+import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -100,6 +101,30 @@ public class MysqlMonitoredSubredditMapping extends MysqlObjectWithIDMapping<Mon
 		return fetchByAction("SELECT * FROM " + table + " WHERE subreddit=?",
 				new PreparedStatementSetVarsUnsafe(new MysqlTypeValueTuple(Types.VARCHAR, name)),
 				fetchFromSetFunction());
+	}
+
+	@Override
+	public List<Integer> fetchIDsThatFollow(int hashtagID) {
+		return fetchByAction("SELECT monitored_subreddits.id FROM "
+				+ "monitored_subreddits "
+				+ "INNER JOIN subscribed_hashtags ON monitored_subreddits.id = subscribed_hashtags.monitored_subreddit_id "
+				+ "AND subscribed_hashtags.hashtag_id = ? "
+				+ "AND subscribed_hashtags.deleted_at IS NULL",
+				new PreparedStatementSetVarsUnsafe(new MysqlTypeValueTuple(Types.INTEGER, hashtagID)),
+				fetchFirstColumnIntsFromSetFunction());
+	}
+
+	@Override
+	public List<Integer> fetchReadableIDsThatFollowActionsTags(int actionID) {
+		return fetchByAction("SELECT DISTINCT monitored_subreddits.id FROM "
+				+ "monitored_subreddits "
+				+ "INNER JOIN subscribed_hashtags ON monitored_subreddits.id = subscribed_hashtags.monitored_subreddit_id "
+				+ "AND subscribed_hashtags.deleted_at IS NULL "
+				+ "AND monitored_subreddits.write_only = 0 "
+				+ "INNER JOIN usl_action_hashtags ON subscribed_hashtags.hashtag_id = usl_action_hashtags.hashtag_id "
+				+ "AND usl_action_hashtags.usl_action_id = ?",
+				new PreparedStatementSetVarsUnsafe(new MysqlTypeValueTuple(Types.INTEGER, actionID)),
+				fetchFirstColumnIntsFromSetFunction());
 	}
 
 	/**

@@ -3,6 +3,7 @@ package me.timothy.bots.database;
 import java.sql.Timestamp;
 import java.util.List;
 
+import me.timothy.bots.memory.HandledModActionJoinHistory;
 import me.timothy.bots.models.HandledModAction;
 
 /**
@@ -51,7 +52,6 @@ public interface HandledModActionMapping extends ObjectMapping<HandledModAction>
 	 * @param before before time
 	 * @param num number
 	 * @return up to num handled mod actions strictly later than after
-	 * @deprecated use with subreddit
 	 */
 	public List<HandledModAction> fetchLatest(Timestamp after, Timestamp before, int num);
 	
@@ -66,5 +66,16 @@ public interface HandledModActionMapping extends ObjectMapping<HandledModAction>
 	 * @return up to num hma's with mon_sub_id subreddit at or later than after and strictly before before
 	 */
 	public List<HandledModAction> fetchLatestForSubreddit(int subredditID, Timestamp after, Timestamp before, int num);
+	
+	/**
+	 * Fetch handled mod actions which are paired with either a ban or unban, in general, between after
+	 * (inclusive) and before (exclusive).
+	 * 
+	 * @param after the time which all returned results will have occurred at or after
+	 * @param before the time which all returned results will have occurred at strictly before
+	 * @param num the maximum number of results to return
+	 * @return the handled mod actions which have a ban or unban, and the corresponding ban or unban
+	 */
+	public List<HandledModActionJoinHistory> fetchLatestJoined(Timestamp after, Timestamp before, int num);
 	
 }
