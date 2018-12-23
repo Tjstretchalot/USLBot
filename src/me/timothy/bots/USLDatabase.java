@@ -16,6 +16,7 @@ import org.apache.logging.log4j.Logger;
 import me.timothy.bots.database.AcceptModeratorInviteRequestMapping;
 import me.timothy.bots.database.ActionLogMapping;
 import me.timothy.bots.database.BanHistoryMapping;
+import me.timothy.bots.database.DeletedPersonMapping;
 import me.timothy.bots.database.DirtyPersonMapping;
 import me.timothy.bots.database.FullnameMapping;
 import me.timothy.bots.database.HandledAtTimestampMapping;
@@ -23,11 +24,14 @@ import me.timothy.bots.database.HandledModActionMapping;
 import me.timothy.bots.database.HashtagMapping;
 import me.timothy.bots.database.LastInfoPMMapping;
 import me.timothy.bots.database.MappingDatabase;
+import me.timothy.bots.database.MonitoredSubredditAltModMailMapping;
 import me.timothy.bots.database.MonitoredSubredditMapping;
 import me.timothy.bots.database.ObjectMapping;
 import me.timothy.bots.database.PersonMapping;
+import me.timothy.bots.database.PropagatorSettingMapping;
 import me.timothy.bots.database.RedditToMeaningProgressMapping;
 import me.timothy.bots.database.RegisterAccountRequestMapping;
+import me.timothy.bots.database.RepropagationRequestMapping;
 import me.timothy.bots.database.ResetPasswordRequestMapping;
 import me.timothy.bots.database.ResponseMapping;
 import me.timothy.bots.database.SchemaValidator;
@@ -52,14 +56,18 @@ import me.timothy.bots.database.custom.CustomRedditToMeaningProgressMapping;
 import me.timothy.bots.database.mysql.MysqlAcceptModeratorInviteRequestMapping;
 import me.timothy.bots.database.mysql.MysqlActionLogMapping;
 import me.timothy.bots.database.mysql.MysqlBanHistoryMapping;
+import me.timothy.bots.database.mysql.MysqlDeletedPersonMapping;
 import me.timothy.bots.database.mysql.MysqlFullnameMapping;
 import me.timothy.bots.database.mysql.MysqlHandledModActionMapping;
 import me.timothy.bots.database.mysql.MysqlHashtagMapping;
 import me.timothy.bots.database.mysql.MysqlLastInfoPMMapping;
+import me.timothy.bots.database.mysql.MysqlMonitoredSubredditAltModMailMapping;
 import me.timothy.bots.database.mysql.MysqlMonitoredSubredditMapping;
 import me.timothy.bots.database.mysql.MysqlObjectMapping;
 import me.timothy.bots.database.mysql.MysqlPersonMapping;
+import me.timothy.bots.database.mysql.MysqlPropagatorSettingMapping;
 import me.timothy.bots.database.mysql.MysqlRegisterAccountRequestMapping;
+import me.timothy.bots.database.mysql.MysqlRepropagationRequestMapping;
 import me.timothy.bots.database.mysql.MysqlResetPasswordRequestMapping;
 import me.timothy.bots.database.mysql.MysqlResponseMapping;
 import me.timothy.bots.database.mysql.MysqlSiteSessionMapping;
@@ -79,6 +87,7 @@ import me.timothy.bots.database.mysql.MysqlUnbanRequestMapping;
 import me.timothy.bots.models.AcceptModeratorInviteRequest;
 import me.timothy.bots.models.ActionLog;
 import me.timothy.bots.models.BanHistory;
+import me.timothy.bots.models.DeletedPerson;
 import me.timothy.bots.models.DirtyPerson;
 import me.timothy.bots.models.Fullname;
 import me.timothy.bots.models.HandledAtTimestamp;
@@ -86,9 +95,12 @@ import me.timothy.bots.models.HandledModAction;
 import me.timothy.bots.models.Hashtag;
 import me.timothy.bots.models.LastInfoPM;
 import me.timothy.bots.models.MonitoredSubreddit;
+import me.timothy.bots.models.MonitoredSubredditAltModMail;
 import me.timothy.bots.models.Person;
+import me.timothy.bots.models.PropagatorSetting;
 import me.timothy.bots.models.RedditToMeaningProgress;
 import me.timothy.bots.models.RegisterAccountRequest;
+import me.timothy.bots.models.RepropagationRequest;
 import me.timothy.bots.models.ResetPasswordRequest;
 import me.timothy.bots.models.Response;
 import me.timothy.bots.models.SiteSession;
@@ -150,7 +162,9 @@ public class USLDatabase extends Database implements MappingDatabase {
 		mappingsDict = new HashMap<>();
 		addMapping(Fullname.class, new MysqlFullnameMapping(this, connection));
 		addMapping(MonitoredSubreddit.class, new MysqlMonitoredSubredditMapping(this, connection));
+		addMapping(MonitoredSubredditAltModMail.class, new MysqlMonitoredSubredditAltModMailMapping(this, connection));
 		addMapping(Person.class, new MysqlPersonMapping(this, connection));
+		addMapping(DeletedPerson.class, new MysqlDeletedPersonMapping(this, connection));
 		addMapping(HandledModAction.class, new MysqlHandledModActionMapping(this, connection));
 		addMapping(BanHistory.class, new MysqlBanHistoryMapping(this, connection));
 		addMapping(Response.class, new MysqlResponseMapping(this, connection));
@@ -174,6 +188,8 @@ public class USLDatabase extends Database implements MappingDatabase {
 		addMapping(TemporaryAuthLevel.class, new MysqlTemporaryAuthLevelMapping(this, connection));
 		addMapping(TemporaryAuthRequest.class, new MysqlTemporaryAuthRequestMapping(this, connection));
 		addMapping(AcceptModeratorInviteRequest.class, new MysqlAcceptModeratorInviteRequestMapping(this, connection));
+		addMapping(PropagatorSetting.class, new MysqlPropagatorSettingMapping(this, connection));
+		addMapping(RepropagationRequest.class, new MysqlRepropagationRequestMapping(this, connection));
 		
 		addCustomMapping(HandledAtTimestamp.class, new CustomHandledAtTimestampMapping(this, Paths.get(flatFileFolder.getPath(), "handled_at_timestamps.dat").toFile()));
 		addCustomMapping(DirtyPerson.class, new CustomDirtyPersonMapping(Paths.get(flatFileFolder.getPath(), "dirty_persons.dat").toFile()));
@@ -434,6 +450,26 @@ public class USLDatabase extends Database implements MappingDatabase {
 		return (RedditToMeaningProgressMapping) mappingsDict.get(RedditToMeaningProgress.class);
 	}
 	
+	@Override
+	public DeletedPersonMapping getDeletedPersonMapping() {
+		return (DeletedPersonMapping) mappingsDict.get(DeletedPerson.class);
+	}
+	
+	@Override
+	public PropagatorSettingMapping getPropagatorSettingMapping() {
+		return (PropagatorSettingMapping) mappingsDict.get(PropagatorSetting.class);
+	}
+	
+	@Override
+	public MonitoredSubredditAltModMailMapping getMonitoredSubredditAltModMailMapping() {
+		return (MonitoredSubredditAltModMailMapping) mappingsDict.get(MonitoredSubredditAltModMail.class);
+	}
+
+	@Override
+	public RepropagationRequestMapping getRepropagationRequestMapping() {
+		return (RepropagationRequestMapping) mappingsDict.get(RepropagationRequest.class);
+	}
+
 	/**
 	 * Adds a fullname to the database
 	 * @param id the fullname to add

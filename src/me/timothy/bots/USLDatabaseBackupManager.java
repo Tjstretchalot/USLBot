@@ -73,6 +73,15 @@ public class USLDatabaseBackupManager {
 		if(nextBackupUTC > now) {
 			return;
 		}
+		forceBackup();
+	}
+	
+	/**
+	 * Performs a database backup and logs it, regardless of how recently its been done.
+	 */
+	public void forceBackup() {
+		final long now = System.currentTimeMillis();
+		
 		ActionLogMapping al = database.getActionLogMapping();
 		al.append("Initiating database backup..");
 		
@@ -117,6 +126,7 @@ public class USLDatabaseBackupManager {
 			throw new RuntimeException(e);
 		}
 	}
+	
 	/**
 	 * Decides where to save the backup file initially.
 	 * 

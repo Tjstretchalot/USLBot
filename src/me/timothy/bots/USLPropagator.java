@@ -9,8 +9,13 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import me.timothy.bots.memory.ModmailPMInformation;
 import me.timothy.bots.memory.PropagateResult;
@@ -21,6 +26,7 @@ import me.timothy.bots.models.HandledModAction;
 import me.timothy.bots.models.Hashtag;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
+import me.timothy.bots.models.PropagatorSetting.PropagatorSettingKey;
 import me.timothy.bots.models.SubscribedHashtag;
 import me.timothy.bots.models.TraditionalScammer;
 import me.timothy.bots.models.USLAction;
@@ -44,7 +50,7 @@ import me.timothy.bots.responses.ResponseInfoFactory;
  * @author Timothy
  */
 public class USLPropagator {
-	//private static final Logger logger = LogManager.getLogger();
+	private static final Logger logger = LogManager.getLogger();
 	
 	/**
 	 * The file configuration
@@ -82,7 +88,8 @@ public class USLPropagator {
 				"triggering tags", "Comma separated tags which are followed by the subreddit we are banning the user on");
 		
 		verifyFormat(database, "propagated_ban_modmail_title", "The title of the PM to the subreddit (not silent) to notify them we banned someone",
-				"banned user", "The user that we banned");
+				"banned user", "The user that we banned",
+				"subreddit", "The subreddit we're banning on");
 		
 		verifyFormat(database, "propagated_ban_modmail_body", "The body of the PM to the subreddit (not silent) to notify them we banned someone",
 				"banned user", "The user that we banned",
@@ -91,7 +98,8 @@ public class USLPropagator {
 		
 		verifyFormat(database, "propagate_ban_to_subreddit_override_unban_title", "The title of the PM to the subreddit (silent or not) to notify them that "
 				+ "we are banning someone they previously unbanned", 
-				"banned user", "The user that we banned");
+				"banned user", "The user that we banned",
+				"subreddit", "The subreddit we're banning on");
 		
 		verifyFormat(database, "propagate_ban_to_subreddit_override_unban_body", "The body of the PM to the subreddit (silent or not) to notify them that "
 				+ "we are banning someone they previously unbanned",
@@ -103,7 +111,8 @@ public class USLPropagator {
 		verifyFormat(database, "propagate_ban_to_subreddit_ban_collision_to_collider_title",
 				"The title of the PM to the subreddit which previously permabanned a user which has now been banned again. Specifically, "
 				+ "this pm is sent went we have a ban on a subreddit which occurred prior to the action and was not done by the bot.",
-				"banned user", "The user that was banned");
+				"banned user", "The user that was banned",
+				"subreddit", "The subreddit we're banning on");
 		
 		verifyFormat(database, "propagate_ban_to_subreddit_ban_collision_to_collider_body",
 				"The body of the PM to the subreddit which previously banned a user which has now been banned again",
@@ -113,34 +122,40 @@ public class USLPropagator {
 		
 		verifyFormat(database, "propagate_unban_std_modmail_title", "The title of the PM to the subreddit (not silent) to notify them that "
 				+ "we are unbanning someone that was previously banned by the bot.",
-				"unbanned user", "The user which we unbanned");
+				"unbanned user", "The user which we unbanned",
+				"subreddit", "The subreddit we're banning on");
 		
 		verifyFormat(database, "propagate_unban_std_modmail_body", "The body of the PM to the subreddit (not silent) to notify them that "
 				+ "we are unbanning someone that was previously banned by the bot.",
 				"unbanned user", "The user which we unbanned",
+				"user history", "Markup formatted information about the history of the person. See USLUserHistoryMarkupFormatter",
 				"banned at", "When the user was originally banned", 
 				"ban note", "The original ban note the user was banned with");
 		
 		verifyFormat(database, "propagate_unban_primary_modmail_title", "The title of the PM to the subreddit (silent or not) to notify them that "
 				+ "we are unbanning someone that was banned on the subreddit but not by the bot. The decision to do this was made by the "
 				+ "unban request handler so there's really no logic to be done at this point",
-				"unbanned user", "The user which we unbanned");
+				"unbanned user", "The user which we unbanned",
+				"subreddit", "The subreddit we're banning on");
 		
 		verifyFormat(database, "propagate_unban_primary_modmail_body", "The body of the PM to the subreddit to notify them we are unbanning someone "
 				+ "that they banned, not the bot.",
 				"unbanned user", "The user which we unbanned",
 				"banned at", "When the user was originally banned",
+				"user history", "Markup formatted information about the history of the person. See USLUserHistoryMarkupFormatter",
 				"ban note", "The original ban note the user was banned with");
 		
 		verifyFormat(database, "propagate_unban_failed_modmail_title", "The title of the PM to the subreddit (silent or not) to notify them that "
 				+ "they have a ban that doesn't appear to be related to the USL for a user which we wanted to unban. We do not unban "
 				+ "the user in this case.",
-				"unbanned user", "The user which was not unbanned but would have been");
+				"unbanned user", "The user which was not unbanned but would have been",
+				"subreddit", "The subreddit we're unbanning on");
 		
 		verifyFormat(database, "propagate_unban_failed_modmail_body", "The body of the PM to the subreddit (silent or not) to notify them that "
 				+ "they have a ban that doesn't appear to be related to the USL for a user which we wanted to unban. We do not unban "
 				+ "the user in this case.",
 				"unbanned user", "The user which was not unbanned but would have been",
+				"user history", "Markup formatted information about the history of the person. See USLUserHistoryMarkupFormatter",
 				"banned at", "When the user was banned by the subreddit",
 				"ban note", "The note that the subreddit has about the user");
 	}
@@ -179,6 +194,14 @@ public class USLPropagator {
 		TraditionalScammer tradScammer = database.getTraditionalScammerMapping().fetchByPersonID(action.personID);
 		if(tradScammer != null) // not our problem
 			return new PropagateResult(action);
+
+		String suppressNoOpMessVal = database.getPropagatorSettingMapping().get(PropagatorSettingKey.SUPPRESS_NO_OP_MESSAGES);
+		boolean suppressNoOpMess = false;
+		if(suppressNoOpMessVal == null) {
+			database.getPropagatorSettingMapping().put(PropagatorSettingKey.SUPPRESS_NO_OP_MESSAGES, "false");
+		}else if(suppressNoOpMessVal.equals("true")) {
+			suppressNoOpMess = true;
+		}
 		
 		Person pers = database.getPersonMapping().fetchByID(action.personID);
 		if(pers.username.equals("[deleted]"))
@@ -187,23 +210,17 @@ public class USLPropagator {
 		Person bot = database.getPersonMapping().fetchByUsername(config.getProperty("user.username"));
 		List<Integer> expBanOnIDs = database.getMonitoredSubredditMapping().fetchReadableIDsThatFollowActionsTags(action.id);
 		
+		if(!suppressNoOpMess) {
+			String expBanOnSubs = expBanOnIDs.stream().map((banId) -> database.getMonitoredSubredditMapping().fetchByID(banId).subreddit).collect(Collectors.joining(", "));
+			
+			logger.printf(Level.TRACE, "For /u/%s we expect him to be banned on %s", pers.username, expBanOnSubs);
+		}
+		
 		// We locate the subreddit which we will classify as the source of this ban. We will only identify it as a single
 		// subreddit IF there is EXACTLY one ban on the person attached to the action which was not done by the bot. In
 		// all other cases, the original subreddit is just "(ambiguous)"
-		String originalSubreddit = null;
-		for(int subId : expBanOnIDs) {
-			MonitoredSubreddit sub = readingSubreddits.get(subId);
-			BanHistory ban = database.getBanHistoryMapping().fetchByActionAndSubreddit(action.id, sub.id);
-			
-			if(ban != null && ban.modPersonID != bot.id) {
-				if(originalSubreddit != null) {
-					originalSubreddit = null;
-					break;
-				}else {
-					originalSubreddit = sub.subreddit;
-				}
-			}
-		}
+		String originalSubreddit = getOriginatingSubredditFast(action, readingSubreddits, bot, expBanOnIDs);
+		originalSubreddit = (originalSubreddit == null ? getOriginatingSubredditSlow(action, readingSubreddits, bot, expBanOnIDs) : originalSubreddit);
 		if(originalSubreddit == null) {
 			originalSubreddit = "(ambiguous)";
 		}
@@ -216,19 +233,20 @@ public class USLPropagator {
 			MonitoredSubreddit sub = readingSubreddits.get(expBanOn);
 			subredditsNotYetHandled.remove(expBanOn);
 			
-			result = propagateWhenExpectBan(action, sub, originalSubreddit).merge(result);
+			result = propagateWhenExpectBan(action, sub, originalSubreddit, suppressNoOpMess).merge(result);
 		}
 		
 		for(int missed : subredditsNotYetHandled) {
 			MonitoredSubreddit sub = readingSubreddits.get(missed);
 			
-			result = propagateWhenExpectUnbanned(action, sub).merge(result);
+			result = propagateWhenExpectUnbanned(action, sub, suppressNoOpMess).merge(result);
 		}
 		
 		return result;
 	}
 	
-	private PropagateResult propagateWhenExpectBan(USLAction action, MonitoredSubreddit subreddit, String originalSubreddit) {
+	private PropagateResult propagateWhenExpectBan(USLAction action, MonitoredSubreddit subreddit, String originalSubreddit,
+			boolean suppressNoOpMess) {
 		Person bot = database.getPersonMapping().fetchByUsername(config.getProperty("user.username"));
 		final Person toBan = database.getPersonMapping().fetchByID(action.personID);
 		
@@ -265,15 +283,20 @@ public class USLPropagator {
 			// Note: Subreddit B is unknown at this point, but we know they must have just *done something*
 			// Note: It's possible subreddit B doesn't know about the ban from subreddit A
 			
-			// We're going to notify subreddit A
+			// We're going to notify subreddit A unless were not sending no-op messages right now
+			if(suppressNoOpMess)
+				return new PropagateResult(action);
 			
 			String titleFormat = database.getResponseMapping().fetchByName("propagate_ban_to_subreddit_ban_collision_to_collider_title").responseBody;
 			String bodyFormat = database.getResponseMapping().fetchByName("propagate_ban_to_subreddit_ban_collision_to_collider_body").responseBody;
 			
 			ResponseInfo respInfo = new ResponseInfo(ResponseInfoFactory.base);
 			respInfo.addLongtermString("banned user", toBan.username);
+			respInfo.addTemporaryString("subreddit", subreddit.subreddit);
 			
 			String title = new ResponseFormatter(titleFormat, respInfo).getFormattedResponse(config, database);
+			
+			respInfo.clearTemporary();
 			
 			respInfo.addLongtermString("user history", USLHistoryMarkupFormatter.format(database, config, action.personID, false));
 			respInfo.addLongtermString("triggering tags", getPrettyTriggeringTags(action, subreddit));
@@ -302,8 +325,11 @@ public class USLPropagator {
 				
 				ResponseInfo responseInfo = new ResponseInfo(ResponseInfoFactory.base);
 				responseInfo.addLongtermString("banned user", toBan.username);
+				responseInfo.addTemporaryString("subreddit", subreddit.subreddit);
 				
 				String title = new ResponseFormatter(titleFormat, responseInfo).getFormattedResponse(config, database);
+				
+				responseInfo.clearTemporary();
 				
 				responseInfo.addTemporaryString("user history", USLHistoryMarkupFormatter.format(database, config, action.personID, false));
 				responseInfo.addTemporaryString("triggering tags", getPrettyTriggeringTags(action, subreddit));
@@ -328,9 +354,11 @@ public class USLPropagator {
 			
 			ResponseInfo responseInfo = new ResponseInfo(ResponseInfoFactory.base);
 			responseInfo.addLongtermString("banned user", toBan.username);
+			responseInfo.addTemporaryString("subreddit", subreddit.subreddit);
 			
 			String title = new ResponseFormatter(titleFormat, responseInfo).getFormattedResponse(config, database);
 			
+			responseInfo.clearTemporary();
 			responseInfo.addTemporaryString("user history", USLHistoryMarkupFormatter.format(database, config, action.personID, false));
 			responseInfo.addTemporaryString("triggering tags", getPrettyTriggeringTags(action, subreddit));
 			
@@ -360,7 +388,8 @@ public class USLPropagator {
 				Collections.emptyList());
 	}
 	
-	private PropagateResult propagateWhenExpectUnbanned(USLAction action, MonitoredSubreddit subreddit) {
+	private PropagateResult propagateWhenExpectUnbanned(USLAction action, MonitoredSubreddit subreddit,
+			boolean suppressNoOpMess) {
 		Person bot = database.getPersonMapping().fetchByUsername(config.getProperty("user.username"));
 		Person toBan = database.getPersonMapping().fetchByID(action.personID);
 		
@@ -393,13 +422,18 @@ public class USLPropagator {
 			
 			List<SubscribedHashtag> subTagsForSubreddit = database.getSubscribedHashtagMapping().fetchForSubreddit(subreddit.id, false);
 			List<Hashtag> tagsForSubreddit = database.getHashtagMapping().fetchForSubscribed(subTagsForSubreddit);
+			
 			String banNoteLower = ban.banDescription.toLowerCase();
 			
 			boolean override = false;
-			for(Hashtag tag : tagsForSubreddit) {
-				if(banNoteLower.contains(tag.tag.toLowerCase())) {
-					override = true;
-					break;
+			if(banNoteLower.contains("#scammer")) { // TODO make this a property of the hashtag. This check was needed to prevent spam
+				override = true;
+			}else {
+				for(Hashtag tag : tagsForSubreddit) {
+					if(banNoteLower.contains(tag.tag.toLowerCase())) {
+						override = true;
+						break;
+					}
 				}
 			}
 			
@@ -410,29 +444,40 @@ public class USLPropagator {
 				
 				ResponseInfo respInfo = new ResponseInfo(ResponseInfoFactory.base);
 				respInfo.addLongtermString("unbanned user", toBan.username);
+				respInfo.addTemporaryString("subreddit", subreddit.subreddit);
 				
 				String title = new ResponseFormatter(titleFormat, respInfo).getFormattedResponse(config, database);
 				
+				respInfo.clearTemporary();
+				
 				respInfo.addLongtermString("banned at", SimpleDateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(hma.occurredAt));
 				respInfo.addLongtermString("ban note", ban.banDescription);
+				respInfo.addLongtermString("user history", USLHistoryMarkupFormatter.format(database, config, toBan.id, false));
 				
 				String body = new ResponseFormatter(bodyFormat, respInfo).getFormattedResponse(config, database);
 				
 				pms.add(new ModmailPMInformation(subreddit, title, body));
 			}else {
 				// We will not override this ban since we can't relate it to a tag relevant to the subreddit. We will notify
-				// them about the situation.
+				// them about the situation unless we are not sending no op messages
+
+				if(suppressNoOpMess)
+					return new PropagateResult(action);
 				
 				String titleFormat = database.getResponseMapping().fetchByName("propagate_unban_failed_modmail_title").responseBody;
 				String bodyFormat = database.getResponseMapping().fetchByName("propagate_unban_failed_modmail_body").responseBody;
 				
 				ResponseInfo respInfo = new ResponseInfo(ResponseInfoFactory.base);
 				respInfo.addLongtermString("unbanned user", toBan.username);
+				respInfo.addTemporaryString("subreddit", subreddit.subreddit);
 
 				String title = new ResponseFormatter(titleFormat, respInfo).getFormattedResponse(config, database);
 				
+				respInfo.clearTemporary();
+				
 				respInfo.addLongtermString("banned at", SimpleDateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(hma.occurredAt));
 				respInfo.addLongtermString("ban note", ban.banDescription);
+				respInfo.addLongtermString("user history", USLHistoryMarkupFormatter.format(database, config, toBan.id, false));
 				
 				String body = new ResponseFormatter(bodyFormat, respInfo).getFormattedResponse(config, database);
 				
@@ -448,11 +493,15 @@ public class USLPropagator {
 
 			ResponseInfo respInfo = new ResponseInfo(ResponseInfoFactory.base);
 			respInfo.addLongtermString("unbanned user", toBan.username);
+			respInfo.addTemporaryString("subreddit", subreddit.subreddit);
 			
 			String title = new ResponseFormatter(titleFormat, respInfo).getFormattedResponse(config, database);
 			
+			respInfo.clearTemporary();
+			
 			respInfo.addLongtermString("banned at", SimpleDateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(hma.occurredAt));
 			respInfo.addLongtermString("ban note", ban.banDescription);
+			respInfo.addLongtermString("user history", USLHistoryMarkupFormatter.format(database, config, toBan.id, false));
 			
 			String body = new ResponseFormatter(bodyFormat, respInfo).getFormattedResponse(config, database);
 			
@@ -504,5 +553,52 @@ public class USLPropagator {
 		}
 		
 		return best;
+	}
+	
+	private String getOriginatingSubredditFast(USLAction action, Map<Integer, MonitoredSubreddit> readingSubreddits, Person bot, List<Integer> expBanOnIDs) {
+		String originalSubreddit = null;
+		for(int subId : expBanOnIDs) {
+			MonitoredSubreddit sub = readingSubreddits.get(subId);
+			BanHistory ban = database.getBanHistoryMapping().fetchByActionAndSubreddit(action.id, sub.id);
+			
+			if(ban != null && ban.modPersonID != bot.id) {
+				if(originalSubreddit != null) {
+					return null;
+				}else {
+					originalSubreddit = sub.subreddit;
+				}
+			}
+		}
+		return originalSubreddit;
+	}
+	
+	private String getOriginatingSubredditSlow(USLAction action, Map<Integer, MonitoredSubreddit> readingSubreddits, Person bot, List<Integer> expBanOnIDs) {
+		List<Hashtag> allTags = database.getHashtagMapping().fetchAll();
+		
+		String originalSubreddit = null;
+		for(int subId : expBanOnIDs) {
+			MonitoredSubreddit sub = readingSubreddits.get(subId);
+			BanHistory ban = database.getBanHistoryMapping().fetchByActionAndSubreddit(action.id, sub.id);
+			
+			if(ban != null && ban.modPersonID != bot.id) {
+				String descLower = ban.banDescription.toLowerCase();
+				boolean matchesTag = false;
+				for(Hashtag tg : allTags) {
+					if(descLower.toString().contains(tg.tag.toLowerCase())) {
+						matchesTag = true;
+						break;
+					}
+				}
+				
+				if(matchesTag) {
+					if(originalSubreddit != null) {
+						return null;
+					}else {
+						originalSubreddit = sub.subreddit;
+					}
+				}
+			}
+		}
+		return originalSubreddit;
 	}
 }

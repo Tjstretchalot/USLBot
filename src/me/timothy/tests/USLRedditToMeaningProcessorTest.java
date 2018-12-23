@@ -2,6 +2,8 @@ package me.timothy.tests;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Paths;
@@ -603,6 +605,172 @@ public class USLRedditToMeaningProcessorTest {
 				((a) -> (a.personID == banned1.id && a.isBan && a.isLatest && Math.abs(a.createdAt.getTime() - oldTime) < 1000)));
 	}
 	
+	// Read-only subreddits must still have unbans propagated to them, so the only difference should be that the TAGS on the
+	// bans don't get processed into tags on the USL.
+	
+	@Test
+	public void testReadOnlyBanGetsAttachedToNewAction() {
+		DBShortcuts db = new DBShortcuts(database, config);
+		
+		MonitoredSubreddit usl = db.primarySub();
+		MonitoredSubreddit sub1 = db.sub();
+		MonitoredSubreddit sub2 = db.sub2();
+		sub2.readOnly = true;
+		database.getMonitoredSubredditMapping().save(sub2);
+
+		Hashtag scammer = scammerTag();
+		
+		db.attach(usl, scammer);
+		db.attach(sub1, scammer);
+		db.attach(sub2, scammer);
+		
+		HandledModAction hma1 = db.hma(sub2, db.now(-99000));
+		BanHistory ban1 = db.bh(mod2, banned1, hma1, "#scammer", true);
+		
+		processor.processBan(tags, hma1, ban1);
+		assertNull(database.getUSLActionMapping().fetchLatest(banned1.id));
+		
+		HandledModAction hma2 = db.hma(sub1, db.now(-96000));
+		BanHistory ban2 = db.bh(mod, banned1, hma2, "#scammer", true);
+		processor.processBan(tags, hma2, ban2);
+		
+		final USLAction act = database.getUSLActionMapping().fetchLatest(banned1.id);
+		assertNotNull(act);
+		assertTrue(act.isBan);
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionHashtagMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.hashtagID == scammer.id);
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionBanHistoryMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.banHistoryID == ban1.id,
+				(a) -> a.actionID == act.id && a.banHistoryID == ban2.id);
+	}
+	
+	@Test
+	public void testReadOnlyUnbanGetsAttachedToNewAction() {
+		DBShortcuts db = new DBShortcuts(database, config);
+		
+		MonitoredSubreddit sub1 = db.sub();
+		MonitoredSubreddit usl = db.primarySub();
+		
+		Hashtag scammer = scammerTag();
+		db.attach(usl, scammer);
+		
+		sub1.readOnly = true;
+		database.getMonitoredSubredditMapping().save(sub1);
+		
+		HandledModAction hma1 = db.hma(sub1, db.now(-99000));
+		BanHistory ban1 = db.bh(mod, banned1, hma1, "deleted posts", true);
+		
+		HandledModAction hma2 = db.hma(sub1, db.now(-95000));
+		UnbanHistory unban1 = db.ubh(mod, banned1, hma2);
+		
+		HandledModAction hma3 = db.hma(usl, db.now(-93000));
+		BanHistory ban2 = db.bh(mod2, banned1, hma3, "#scammer", true);
+		
+		processor.processBan(tags, hma1, ban1);
+		assertNull(database.getUSLActionMapping().fetchLatest(banned1.id));
+		
+		processor.processUnban(tags, hma2, unban1);
+		assertNull(database.getUSLActionMapping().fetchLatest(banned1.id));
+		
+		processor.processBan(tags, hma3, ban2);
+		final USLAction act = database.getUSLActionMapping().fetchLatest(banned1.id);
+		assertNotNull(act);
+		assertTrue(act.isBan);
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionHashtagMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.hashtagID == scammer.id);
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionBanHistoryMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.banHistoryID == ban2.id);
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionUnbanHistoryMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.unbanHistoryID == unban1.id);
+	}
+	
+	@Test
+	public void testReadOnlyBanGetsAttachedToOldAction() {
+		DBShortcuts db = new DBShortcuts(database, config);
+		
+		db.primarySub();
+		MonitoredSubreddit sub1 = db.sub();
+		MonitoredSubreddit sub2 = db.sub2();
+		
+		sub1.readOnly = true;
+		database.getMonitoredSubredditMapping().save(sub1);
+		
+		scammerTag();
+		Hashtag sketchy = sketchyTag();
+		
+		HandledModAction hma1 = db.hma(sub2, db.now(-99000));
+		BanHistory ban1 = db.bh(mod2, banned1, hma1, "#sketchy", true);
+		
+		processor.processBan(tags, hma1, ban1);
+		final USLAction act = database.getUSLActionMapping().fetchLatest(banned1.id);
+		assertNotNull(act);
+		assertTrue(act.isBan);
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionHashtagMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.hashtagID == sketchy.id);
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionBanHistoryMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.banHistoryID == ban1.id);
+		
+		HandledModAction hma2 = db.hma(sub1, db.now(-96000));
+		BanHistory ban2 = db.bh(bot, banned1, hma2, "#sketchy from sub2", true);
+		
+		processor.processBan(tags, hma2, ban2);
+		assertEquals(act, database.getUSLActionMapping().fetchLatest(banned1.id));
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionHashtagMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.hashtagID == sketchy.id);
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionBanHistoryMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.banHistoryID == ban1.id,
+				(a) -> a.actionID == act.id && a.banHistoryID == ban2.id);
+	}
+	
+	@Test
+	public void testReadOnlyUnbanGetsAttachedToOldAction() {
+		DBShortcuts db = new DBShortcuts(database, config);
+		
+		db.primarySub();
+		MonitoredSubreddit sub1 = db.sub();
+		MonitoredSubreddit sub2 = db.sub2();
+		
+		sub1.readOnly = true;
+		database.getMonitoredSubredditMapping().save(sub1);
+		
+		Hashtag scammer = scammerTag();
+		db.attach(sub1, scammer);
+		db.attach(sub2, scammer);
+		
+		HandledModAction hma1 = db.hma(sub2, db.now(-99000));
+		BanHistory ban1 = db.bh(mod, banned1, hma1, "#scammer", true);
+		
+		processor.processBan(tags, hma1, ban1);
+		final USLAction act = database.getUSLActionMapping().fetchLatest(banned1.id);
+		assertNotNull(act);
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionHashtagMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.hashtagID == scammer.id);
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionBanHistoryMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.banHistoryID == ban1.id);
+		
+		HandledModAction hma2 = db.hma(sub1, db.now(-95000));
+		BanHistory ban2 = db.bh(bot, banned1, hma2, "#scammer from sub1", true);
+		
+		processor.processBan(tags, hma2, ban2);
+		assertEquals(act, database.getUSLActionMapping().fetchLatest(banned1.id));
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionHashtagMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.hashtagID == scammer.id);
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionBanHistoryMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.banHistoryID == ban1.id,
+				(a) -> a.actionID == act.id && a.banHistoryID == ban2.id);
+		
+		HandledModAction hma3 = db.hma(sub1, db.now(-90000));
+		UnbanHistory unban1 = db.ubh(mod2, banned1, hma3);
+		
+		processor.processUnban(tags, hma3, unban1);
+		assertEquals(act, database.getUSLActionMapping().fetchLatest(banned1.id));
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionHashtagMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.hashtagID == scammer.id);
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionBanHistoryMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.banHistoryID == ban1.id);
+		MysqlTestUtils.assertListContentsPreds(database.getUSLActionUnbanHistoryMapping().fetchByUSLActionID(act.id),
+				(a) -> a.actionID == act.id && a.unbanHistoryID == unban1.id);
+	}
 	
 	@After 
 	public void cleanUp() {

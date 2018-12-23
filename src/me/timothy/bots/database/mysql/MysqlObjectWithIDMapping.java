@@ -29,5 +29,4 @@ public abstract class MysqlObjectWithIDMapping<A> extends MysqlObjectMapping<A> 
 			
 		}, fetchFromSetFunction());
 	}
-
 }

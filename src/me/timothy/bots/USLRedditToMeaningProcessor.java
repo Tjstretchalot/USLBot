@@ -173,12 +173,14 @@ public class USLRedditToMeaningProcessor {
 			throw new NullPointerException("ban description is null!");
 		
 		MonitoredSubreddit banSub = database.getMonitoredSubredditMapping().fetchByID(modAction.monitoredSubredditID);
-		if(banSub.readOnly) {
-			if(extremeTrace) { logger.printf(Level.TRACE, "Skipping; subreddit /r/%s can't write", banSub.subreddit); }
-			return Collections.emptySet();
-		}
 		
-		List<Hashtag> relevant = getRelevant(tags, ban);
+		List<Hashtag> relevant;
+		if(banSub.readOnly) {
+			if(extremeTrace) { logger.printf(Level.TRACE, "Ignoring tags; subreddit /r/%s can't write", banSub.subreddit); }
+			relevant = Collections.emptyList();
+		}else {
+			relevant = getRelevant(tags, ban);
+		}
 		
 		if(extremeTrace) { logger.printf(Level.TRACE, "Relevant tags: %s", relevant.stream().map((a) -> a.toPrettyString(database)).collect(Collectors.joining(", "))); }
 		

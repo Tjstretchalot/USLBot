@@ -1,6 +1,7 @@
 package me.timothy.tests;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -422,6 +423,100 @@ public class PropagatorTest {
 		MysqlTestUtils.assertListContentsPreds(result.bans);
 		MysqlTestUtils.assertListContentsPreds(result.unbans, 
 				(a) -> a.person.equals(banned) && a.subreddit.equals(sub1));
+	}
+	
+	@Test
+	public void testPropagateWhenReadOnlyAndLast() {
+		// this test is an attempt to catch a bug that was detected
+		// see https://mod.reddit.com/mail/all/65zf1
+		// it wasn't the actual issue since it was the reddit to meaning processor that went wrong
+		
+		DBShortcuts db = new DBShortcuts(database, config);
+		
+		initResponses();
+		Hashtag scammer = scammerTag();
+		Hashtag sketchy = sketchyTag();
+		
+		MonitoredSubreddit usl = db.primarySub();
+		MonitoredSubreddit misc = db.sub("giftcardexchange");
+		MonitoredSubreddit borrow = db.sub("borrow");
+		MonitoredSubreddit lenderscamp = db.sub("lenderscamp");
+		lenderscamp.readOnly = true;
+		database.getMonitoredSubredditMapping().save(lenderscamp);
+		
+		db.attach(usl, scammer);
+		db.attach(misc, scammer);
+		db.attach(borrow, scammer);
+		db.attach(lenderscamp, scammer);
+		db.attach(borrow, sketchy);
+		db.attach(lenderscamp, sketchy);
+		
+		Person fox = db.person("FoxK56");
+		db.person("mazdoore");
+		Person engin = db.person("Enginerdad");
+		Person bot = db.bot();
+		
+		HandledModAction hma1 = db.hma(borrow, db.now(-100000));
+		db.bh(fox, engin, hma1, "#scammer", true);
+		
+		HandledModAction hma2 = db.hma(borrow, db.now(-97000));
+		UnbanHistory unban = db.ubh(fox, engin, hma2);
+		
+		HandledModAction hma3 = db.hma(usl, db.now(-90000));
+		BanHistory ban2 = db.bh(bot, engin, hma3, "#scammer from borrow", true);
+		
+		HandledModAction hma4 = db.hma(misc, db.now(-88000));
+		BanHistory ban3 = db.bh(bot, engin, hma4, "#scammer from borrow", true);
+		
+		HandledModAction hma5 = db.hma(lenderscamp, db.now(-85000));
+		BanHistory ban4 = db.bh(bot, engin, hma5, "#scammer from borrow", true);
+		
+		USLAction act = db.action(true, engin, new Hashtag[] { scammer }, new BanHistory[] { ban2, ban3, ban4 }, new UnbanHistory[] { unban });
+		
+		USLAction newAct = database.getUSLActionMapping().create(false, engin.id, db.now(-80000));
+		
+		act = database.getUSLActionMapping().fetchByID(act.id);
+		
+		database.getUSLActionBanHistoryMapping().save(new USLActionBanHistory(newAct.id, ban2.id));
+		database.getUSLActionBanHistoryMapping().save(new USLActionBanHistory(newAct.id, ban3.id));
+		database.getUSLActionBanHistoryMapping().save(new USLActionBanHistory(newAct.id, ban4.id));
+		database.getUSLActionUnbanHistoryMapping().save(new USLActionUnbanHistory(newAct.id, unban.id));
+		
+		PropagateResult result = propagator.propagateAction(newAct);
+		assertNotNull(result);
+		assertFalse(result.unbans.isEmpty());
+		MysqlTestUtils.assertListContentsPreds(result.unbans,
+				(a) -> a.subreddit.id == misc.id,
+				(a) -> a.subreddit.id == usl.id,
+				(a) -> a.subreddit.id == lenderscamp.id);
+		
+		HandledModAction hma6 = db.hma(usl, db.now(-75000));
+		UnbanHistory unban2 = db.ubh(bot, engin, hma6);
+		
+		HandledModAction hma7 = db.hma(misc, db.now(-73000));
+		UnbanHistory unban3 = db.ubh(bot, engin, hma7);
+		
+		database.getUSLActionBanHistoryMapping().delete(newAct.id, ban2.id);
+		database.getUSLActionUnbanHistoryMapping().save(new USLActionUnbanHistory(newAct.id, unban2.id));
+
+		database.getUSLActionBanHistoryMapping().delete(newAct.id, ban3.id);
+		database.getUSLActionUnbanHistoryMapping().save(new USLActionUnbanHistory(newAct.id, unban3.id));
+		
+		result = propagator.propagateAction(newAct);
+		assertNotNull(result);
+		assertFalse(result.unbans.isEmpty());
+		MysqlTestUtils.assertListContentsPreds(result.unbans,
+				(a) -> a.subreddit.id == lenderscamp.id);
+
+		HandledModAction hma8 = db.hma(lenderscamp, db.now(-73000));
+		UnbanHistory unban4 = db.ubh(bot, engin, hma8);
+
+		database.getUSLActionBanHistoryMapping().delete(newAct.id, ban4.id);
+		database.getUSLActionUnbanHistoryMapping().save(new USLActionUnbanHistory(newAct.id, unban4.id));
+
+		result = propagator.propagateAction(newAct);
+		assertNotNull(result);
+		MysqlTestUtils.assertListContentsPreds(result.unbans);
 	}
 	
 	@After 

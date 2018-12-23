@@ -7,6 +7,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.sql.Timestamp;
 import java.util.Collection;
 import java.util.HashSet;
@@ -332,7 +333,13 @@ public class CustomHandledAtTimestampMapping implements HandledAtTimestampMappin
 	public void purgeSchema() {
 		close();
 		
-		file.delete();
+		try {
+			Files.delete(file.toPath());
+		}catch(IOException e) { 
+			logger.throwing(e);
+			throw new RuntimeException(e);
+		}
+		
 		recover();
 	}
 }

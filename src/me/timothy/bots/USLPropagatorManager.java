@@ -29,6 +29,7 @@ import me.timothy.bots.models.Person;
 import me.timothy.bots.models.SubredditModqueueProgress;
 import me.timothy.bots.models.USLAction;
 import me.timothy.bots.models.UnbanRequest;
+import me.timothy.bots.models.PropagatorSetting.PropagatorSettingKey;
 
 /**
  * This class decides which and when to propagate bans using
@@ -250,7 +251,8 @@ public class USLPropagatorManager {
 		PersonMapping persMap = database.getPersonMapping();
 		USLActionMapping actMap = database.getUSLActionMapping();
 		
-		int actionCounter = 0;
+		long start = System.currentTimeMillis();
+		long finishTime = start + (1000 * 60 * 60 * 3);
 		
 		List<DirtyPerson> dirtyList = new ArrayList<>();
 		while(!(dirtyList = dirtMap.fetch(10)).isEmpty()) {
@@ -261,18 +263,22 @@ public class USLPropagatorManager {
 				USLAction act = actMap.fetchLatest(dirty.personID);
 				if(act != null) {
 					PropagateResult result = propagator.propagateAction(act);
-					boolean reqAct = resultHandler.handleResult(result);
-					if(reqAct)
-						actionCounter++;
+					resultHandler.handleResult(result);
 				}
 				
 				dirtMap.delete(dirty.personID);
 				
-				if(actionCounter >= 3) {
-					logger.printf(Level.INFO, "Propagator reached maximum actions per loop restriction. There may be more work to do.");
+				if(System.currentTimeMillis() >= finishTime) {
+					logger.printf(Level.INFO, "Propagator reached maximum actions per loop restriction. There are %d more persons to be sent", dirtMap.count());
 					return;
 				}
 			}
+		}
+		
+		String suppressNoOpMessVal = database.getPropagatorSettingMapping().get(PropagatorSettingKey.SUPPRESS_NO_OP_MESSAGES);
+		if(suppressNoOpMessVal == null || !suppressNoOpMessVal.equals("false")) {
+			logger.printf(Level.INFO, "Propagator finished loop with no more work to do, unsuppressing no-op messages");
+			database.getPropagatorSettingMapping().put(PropagatorSettingKey.SUPPRESS_NO_OP_MESSAGES, "false");
 		}
 	}
 }

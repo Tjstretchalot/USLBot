@@ -36,4 +36,8 @@ public interface MappingDatabase {
 	public USLActionUnbanHistoryMapping getUSLActionUnbanHistoryMapping();
 	public DirtyPersonMapping getDirtyPersonMapping();
 	public RedditToMeaningProgressMapping getRedditToMeaningProgressMapping();
+	public DeletedPersonMapping getDeletedPersonMapping();
+	public PropagatorSettingMapping getPropagatorSettingMapping();
+	public MonitoredSubredditAltModMailMapping getMonitoredSubredditAltModMailMapping();
+	public RepropagationRequestMapping getRepropagationRequestMapping();
 }

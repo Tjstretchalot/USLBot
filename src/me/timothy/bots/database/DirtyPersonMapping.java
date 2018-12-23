@@ -33,4 +33,11 @@ public interface DirtyPersonMapping extends ObjectMapping<DirtyPerson> {
 	 * @param personId the id of the person in the row you want to delete
 	 */
 	public void delete(int personId);
+	
+	/**
+	 * Counts the number of rows that are in this database.
+	 * 
+	 * @return the number of rows in the database
+	 */
+	public int count();
 }

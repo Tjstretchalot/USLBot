@@ -90,6 +90,7 @@ public class MysqlTestUtils {
 	 * @param database the database to clear
 	 */
 	public static void clearDatabase(USLDatabase database) {
+		database.validateTableState();
 		database.truncateMySQL();
 		database.purgeCustom();
 		/*

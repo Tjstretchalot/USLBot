@@ -83,6 +83,20 @@ public class MysqlDirtyPersonMapping extends MysqlObjectMapping<DirtyPerson> imp
 	}
 
 	@Override
+	public int count() {
+		try(PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM " + table)) {
+			try(ResultSet set = statement.executeQuery()) {
+				if(!set.next())
+					throw new RuntimeException("Should always get one row from select count(*)!");
+				return set.getInt(1);
+			}
+		} catch (SQLException e) {
+			logger.throwing(e);
+			throw new RuntimeException(e);
+		}
+	}
+
+	@Override
 	protected DirtyPerson fetchFromSet(ResultSet set) throws SQLException {
 		return new DirtyPerson(set.getInt(1));
 	}

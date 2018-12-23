@@ -223,7 +223,7 @@ public class USLUnbanRequestHandler {
 		}
 		
 		List<USLActionHashtag> tags = database.getUSLActionHashtagMapping().fetchByUSLActionID(action.id);
-		if(tags == null)
+		if(tags == null || tags.isEmpty())
 			return sendNoTagsMessage(request);
 		
 		return authorizeRequest(request);
@@ -445,7 +445,7 @@ public class USLUnbanRequestHandler {
 		
 		return new UnbanRequestResult(request, Collections.emptyList(), 
 				Collections.singletonList(new UserPMInformation(mod, title, body)),
-				null, true);
+				null, false); // we flag invalid as false since we want to repropagate in this instance
 	}
 
 	private UnbanRequestResult sendNoKnownPersonMessage(UnbanRequest request) {

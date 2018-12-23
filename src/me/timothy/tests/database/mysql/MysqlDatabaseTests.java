@@ -34,7 +34,10 @@ import org.junit.runners.Suite.SuiteClasses;
 			MysqlUSLActionHashtagMappingTest.class,
 			MysqlUSLActionUnbanHistoryMappingTest.class,
 			MysqlDirtyPersonMappingTest.class,
-			MysqlRedditToMeaningProgressMappingTest.class
+			MysqlRedditToMeaningProgressMappingTest.class,
+			MysqlDeletedPersonMappingTest.class,
+			MysqlPropagatorSettingMappingTest.class,
+			MysqlMonitoredSubredditAltModMailMappingTest.class
 		})
 public class MysqlDatabaseTests {
 

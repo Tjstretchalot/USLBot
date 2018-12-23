@@ -3,10 +3,9 @@ package me.timothy.bots;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
+import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.Level;
@@ -24,6 +23,7 @@ import me.timothy.bots.memory.UserUnbanInformation;
 import me.timothy.bots.models.AcceptModeratorInviteRequest;
 import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
+import me.timothy.bots.models.RepropagationRequest;
 import me.timothy.bots.models.SubredditModqueueProgress;
 import me.timothy.bots.models.SubredditTraditionalListStatus;
 import me.timothy.bots.models.TraditionalScammer;
@@ -57,6 +57,8 @@ public class USLBotDriver extends BotDriver {
 	protected USLRegisterAccountRequestManager raqManager;
 	protected USLResetPasswordRequestManager rprManager;
 	protected USLTemporaryAuthGranter taHandler;
+	protected DeletedPersonManager deletedPersonManager;
+	protected USLRepropagationRequestManager repropManager;
 	
 	static {
 		BotDriver.BRIEF_PAUSE_MS = 2000;
@@ -90,9 +92,13 @@ public class USLBotDriver extends BotDriver {
 		raqManager = new USLRegisterAccountRequestManager(database, config);
 		rprManager = new USLResetPasswordRequestManager(database, config);
 		taHandler = new USLTemporaryAuthGranter(database, config, (sub, person) -> isModerator(sub, person), (result) -> handleTempAuthResult(result));
+		deletedPersonManager = new DeletedPersonManager(database, this, maybeLoginAgainRunnable);
+		repropManager = new USLRepropagationRequestManager(database, config, backupManager, 
+				(sub, tit, bod) -> submitSelf(sub, tit, bod), (pmInfo) -> handleUserPMs(Collections.singletonList(pmInfo)));
 		
 		unbanRequestHandler.verifyHaveResponses();
 		propagator.verifyHaveResponses();
+		repropManager.verifyHaveResponses();
 	}
 
 	@Override
@@ -131,6 +137,10 @@ public class USLBotDriver extends BotDriver {
 		al.append("Handling authorization requests..");
 		logger.trace("Handling authorization requests..");
 		handleAuthorizationRequests();
+		
+		logger.trace("Handling repropagation requests..");
+		handleRepropagationRequests();
+		al = ((USLDatabase)database).getActionLogMapping();
 		
 		al.append("Propagating people that are on the traditional scammer list..");
 		logger.trace("Handling people on old style list..");
@@ -266,6 +276,16 @@ public class USLBotDriver extends BotDriver {
 	 */
 	protected void handleAuthorizationRequests() {
 		taHandler.handleRequests();
+	}
+	
+	/**
+	 * Handle any repropagation requests
+	 */
+	protected void handleRepropagationRequests() {
+		List<RepropagationRequest> requests = ((USLDatabase)database).getRepropagationRequestMapping().fetchUnhandled();
+		for(RepropagationRequest req : requests) {
+			repropManager.processRequest(req);
+		}
 	}
 	
 	/**
@@ -449,6 +469,9 @@ public class USLBotDriver extends BotDriver {
 		if(result.bans.size() > 0) {
 			didSomething = handleBans(result.bans) || didSomething;
 		}
+		if(result.unbans.size() > 0) {
+			didSomething = handleUnbans(result.unbans) || didSomething;
+		}
 		didSomething = handleModmailPMs(result.modmailPMs) || didSomething;
 		didSomething = handleUserPMs(result.userPMs) || didSomething;
 		return didSomething;
@@ -474,26 +497,12 @@ public class USLBotDriver extends BotDriver {
 	 * @return if we did something with reddit
 	 */
 	protected boolean handleBans(List<UserBanInformation> bans) {
-		Map<String, Boolean> nonexistentCache = new HashMap<>();
 		ActionLogMapping al = ((USLDatabase)database).getActionLogMapping();
 		boolean didSomething = false;
 		for(UserBanInformation ban : bans) {
 			al.append(String.format("Banning {link person %d} on {link subreddit %d}..", ban.person.id, ban.subreddit.id));
 			logger.printf(Level.INFO, "Banning %s on %s..", ban.person.username, ban.subreddit.subreddit);
-			
-			Boolean exists = nonexistentCache.getOrDefault(ban.person.username, null);
-			if(exists == null) {
-				exists = getAccount(ban.person.username) != null;
-				nonexistentCache.put(ban.person.username, exists);
-			}
-			
-			if(!exists) {
-				logger.printf(Level.INFO, "Skipping since that user does not exist");
-				al.append("That person does not exist so actually not banning (likely deleted their account)");
-			}else {
-				handleBanUser(ban);
-				sleepFor(2000);
-			}
+			handleBanUser(ban);
 			
 			didSomething = true;
 		}
@@ -514,7 +523,6 @@ public class USLBotDriver extends BotDriver {
 			logger.printf(Level.INFO, "Unbanning %s on %s..", unban.person.username, unban.subreddit.subreddit);
 			
 			handleUnbanUser(unban);
-			sleepFor(2000);
 			didSomething = true;
 		}
 		return didSomething;
@@ -548,6 +556,11 @@ public class USLBotDriver extends BotDriver {
 		ActionLogMapping al = ((USLDatabase)database).getActionLogMapping();
 		boolean didSomething = false;
 		for(UserPMInformation userPm : userPMs) {
+			if(deletedPersonManager.isDeleted(userPm.person.username)) {
+				logger.printf(Level.INFO, "handleUserPMs suppressing message to /u/%s - /u/%s deleted his account", userPm.person.username, userPm.person.username);
+				continue;
+			}
+			
 			logger.printf(Level.INFO, "Sending some mail to %s (title=%s)", userPm.person.username, userPm.title);
 			al.append(String.format("Sending a personal message to {link user %d} (the title is %s)..", userPm.person.id, userPm.title));
 			Boolean succ = sendMessage(userPm.person.username, userPm.title, userPm.body);
@@ -569,14 +582,12 @@ public class USLBotDriver extends BotDriver {
 	 * @param banInfo the information regarding the ban
 	 */
 	protected void handleBanUser(UserBanInformation banInfo) {
-		Boolean res = super.handleBanUser(banInfo.subreddit.subreddit, banInfo.person.username, banInfo.banMessage, banInfo.banReason, banInfo.banNote);
-		if(res == Boolean.FALSE) {
-			sendModmail(banInfo.subreddit.subreddit, "Failed to ban user", 
-					"Hello,\n\nI failed to ban /u/" + banInfo.person.username + " on your subreddit. "
-					+ "This probably means that he is temporarily banned. You should search this user on the website to "
-					+ "figure out why I tried to ban him, then take the appropriate action. Message /u/tjstretchalot "
-					+ "if you are confused.");
+		if(deletedPersonManager.isDeleted(banInfo.person.username)) {
+			logger.printf(Level.INFO, "handleBanUser suppressing ban for /u/%s on /r/%s - /u/%s deleted his account", banInfo.person.username, banInfo.subreddit.subreddit, banInfo.person.username);
+			return;
 		}
+		
+		super.handleBanUser(banInfo.subreddit.subreddit, banInfo.person.username, banInfo.banMessage, banInfo.banReason, banInfo.banNote);
 	}
 	
 	/**
@@ -586,15 +597,38 @@ public class USLBotDriver extends BotDriver {
 	 * @param unbanInfo the information regarding the unban
 	 */
 	protected void handleUnbanUser(UserUnbanInformation unbanInfo) {
+		if(deletedPersonManager.isDeleted(unbanInfo.person.username)) {
+			logger.printf(Level.INFO, "handleUnbanUser suppressing unban for /u/%s on /r/%s - /u/%s deleted his account", unbanInfo.person.username, unbanInfo.subreddit.subreddit, unbanInfo.person.username);
+			return;
+		}
+		
 		super.handleUnbanUser(unbanInfo.subreddit.subreddit, unbanInfo.person.username);
 	}
 	/**
-	 * Sends modmail to the specified subreddit
+	 * Sends modmail to the specified subreddit. This will look up the subreddit to redirect from the modmail
+	 * to elsewhere if appropraite.
+	 * 
 	 * @param sub subreddit to message
 	 * @param title the title of the message
 	 * @param body the body of the message
 	 */
 	protected void sendModmail(String sub, String title, String body) {
+		USLDatabase db = (USLDatabase) database;
+		
+		MonitoredSubreddit monSub = db.getMonitoredSubredditMapping().fetchByName(sub);
+		if(monSub != null) {
+			List<String> altSubs = db.getMonitoredSubredditAltModMailMapping().fetchForSubreddit(monSub.id);
+			if(!altSubs.isEmpty()) {
+				for(String str : altSubs) {
+					if(str.equalsIgnoreCase(sub)) {
+						sendMessage("/r/" + sub, title, body);
+					}else {
+						submitSelf(str, title, body);
+					}
+				}
+				return;
+			}
+		}
 		sendMessage("/r/" + sub, title, body);
 	}
 	

@@ -165,6 +165,11 @@ public class CustomDirtyPersonMapping implements DirtyPersonMapping, SchemaValid
 	}
 
 	@Override
+	public int count() {
+		return personIds.size();
+	}
+
+	@Override
 	public void validateSchema() throws IllegalStateException {
 	}
 
