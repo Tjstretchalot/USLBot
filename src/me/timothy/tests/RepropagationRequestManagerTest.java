@@ -19,8 +19,9 @@ import me.timothy.bots.USLDatabase;
 import me.timothy.bots.USLDatabaseBackupManager;
 import me.timothy.bots.USLFileConfiguration;
 import me.timothy.bots.USLRepropagationRequestManager;
+import me.timothy.bots.functions.SendModmailFunction;
 import me.timothy.bots.functions.SendPMFunction;
-import me.timothy.bots.functions.SubmitSelfFunction;
+import me.timothy.bots.memory.ModmailPMInformation;
 import me.timothy.bots.memory.UserPMInformation;
 import me.timothy.bots.models.BanHistory;
 import me.timothy.bots.models.DirtyPerson;
@@ -55,10 +56,10 @@ public class RepropagationRequestManagerTest {
 		}
 	}
 	
-	public class MockSubmitSelfFunction implements SubmitSelfFunction {
-		public Queue<SubmitSelfFunction> expectedCalls;
+	public class MockSendModmailFunction implements SendModmailFunction {
+		public Queue<SendModmailFunction> expectedCalls;
 		
-		public MockSubmitSelfFunction() {
+		public MockSendModmailFunction() {
 			expectedCalls = new ArrayDeque<>();
 		}
 		
@@ -67,13 +68,13 @@ public class RepropagationRequestManagerTest {
 		}
 		
 		public void expect(final String subreddit) {
-			expectedCalls.add((sub, title, body) -> { assertEquals(subreddit, sub); });
+			expectedCalls.add((info) -> { assertEquals(subreddit, info.subreddit.subreddit); });
 		}
 		
 		@Override
-		public void submitSelf(String subreddit, String title, String body) {
+		public void sendModmail(ModmailPMInformation info) {
 			assertFalse(expectedCalls.isEmpty());
-			expectedCalls.poll().submitSelf(subreddit, title, body);
+			expectedCalls.poll().sendModmail(info);
 		}	
 	}
 	
@@ -105,7 +106,7 @@ public class RepropagationRequestManagerTest {
 	protected DBShortcuts db;
 	
 	protected MockDatabaseBackupManager backupManager;
-	protected MockSubmitSelfFunction submitSelf;
+	protected MockSendModmailFunction sendModmail;
 	protected MockSendPMFunction sendPM;
 	protected USLRepropagationRequestManager repropManager;
 	
@@ -119,14 +120,14 @@ public class RepropagationRequestManagerTest {
 		MysqlTestUtils.clearDatabase(database);
 		
 		backupManager = new MockDatabaseBackupManager();
-		submitSelf = new MockSubmitSelfFunction();
+		sendModmail = new MockSendModmailFunction();
 		sendPM = new MockSendPMFunction();
-		repropManager = new USLRepropagationRequestManager(database, config, backupManager, submitSelf, sendPM);
+		repropManager = new USLRepropagationRequestManager(database, config, backupManager, sendModmail, sendPM);
 	}
 	
 	protected void postExpect() {
 		backupManager.postExpect();
-		submitSelf.postExpect();
+		sendModmail.postExpect();
 		sendPM.postExpect();
 	}
 	
@@ -201,7 +202,7 @@ public class RepropagationRequestManagerTest {
 			assertEquals("true", database.getPropagatorSettingMapping().get(PropagatorSettingKey.SUPPRESS_NO_OP_MESSAGES));
 		});
 		
-		submitSelf.expect(notifs.subreddit);
+		sendModmail.expect(notifs.subreddit);
 		sendPM.expect(mod);
 		assertNull(database.getPropagatorSettingMapping().get(PropagatorSettingKey.SUPPRESS_NO_OP_MESSAGES));
 		repropManager.processRequest(req);
@@ -247,7 +248,7 @@ public class RepropagationRequestManagerTest {
 		database = null;
 		config = null;
 		backupManager = null;
-		submitSelf = null;
+		sendModmail = null;
 		sendPM = null;
 		repropManager = null;
 	}

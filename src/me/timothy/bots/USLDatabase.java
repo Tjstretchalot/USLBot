@@ -37,6 +37,7 @@ import me.timothy.bots.database.ResponseMapping;
 import me.timothy.bots.database.SchemaValidator;
 import me.timothy.bots.database.SiteSessionMapping;
 import me.timothy.bots.database.SubredditModqueueProgressMapping;
+import me.timothy.bots.database.SubredditPersonBannedReleaseMapping;
 import me.timothy.bots.database.SubredditPropagateStatusMapping;
 import me.timothy.bots.database.SubredditTraditionalListStatusMapping;
 import me.timothy.bots.database.SubscribedHashtagMapping;
@@ -72,6 +73,7 @@ import me.timothy.bots.database.mysql.MysqlResetPasswordRequestMapping;
 import me.timothy.bots.database.mysql.MysqlResponseMapping;
 import me.timothy.bots.database.mysql.MysqlSiteSessionMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditModqueueProgressMapping;
+import me.timothy.bots.database.mysql.MysqlSubredditPersonBannedReleaseMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditPropagateStatusMapping;
 import me.timothy.bots.database.mysql.MysqlSubredditTraditionalListStatusMapping;
 import me.timothy.bots.database.mysql.MysqlSubscribedHashtagMapping;
@@ -105,6 +107,7 @@ import me.timothy.bots.models.ResetPasswordRequest;
 import me.timothy.bots.models.Response;
 import me.timothy.bots.models.SiteSession;
 import me.timothy.bots.models.SubredditModqueueProgress;
+import me.timothy.bots.models.SubredditPersonBannedRelease;
 import me.timothy.bots.models.SubredditPropagateStatus;
 import me.timothy.bots.models.SubredditTraditionalListStatus;
 import me.timothy.bots.models.SubscribedHashtag;
@@ -190,6 +193,7 @@ public class USLDatabase extends Database implements MappingDatabase {
 		addMapping(AcceptModeratorInviteRequest.class, new MysqlAcceptModeratorInviteRequestMapping(this, connection));
 		addMapping(PropagatorSetting.class, new MysqlPropagatorSettingMapping(this, connection));
 		addMapping(RepropagationRequest.class, new MysqlRepropagationRequestMapping(this, connection));
+		addMapping(SubredditPersonBannedRelease.class, new MysqlSubredditPersonBannedReleaseMapping(this, connection));
 		
 		addCustomMapping(HandledAtTimestamp.class, new CustomHandledAtTimestampMapping(this, Paths.get(flatFileFolder.getPath(), "handled_at_timestamps.dat").toFile()));
 		addCustomMapping(DirtyPerson.class, new CustomDirtyPersonMapping(Paths.get(flatFileFolder.getPath(), "dirty_persons.dat").toFile()));
@@ -468,6 +472,11 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public RepropagationRequestMapping getRepropagationRequestMapping() {
 		return (RepropagationRequestMapping) mappingsDict.get(RepropagationRequest.class);
+	}
+	
+	@Override
+	public SubredditPersonBannedReleaseMapping getSubredditPersonBannedReleaseMapping() {
+		return (SubredditPersonBannedReleaseMapping) mappingsDict.get(SubredditPersonBannedRelease.class);
 	}
 
 	/**

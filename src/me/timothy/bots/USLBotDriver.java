@@ -94,7 +94,7 @@ public class USLBotDriver extends BotDriver {
 		taHandler = new USLTemporaryAuthGranter(database, config, (sub, person) -> isModerator(sub, person), (result) -> handleTempAuthResult(result));
 		deletedPersonManager = new DeletedPersonManager(database, this, maybeLoginAgainRunnable);
 		repropManager = new USLRepropagationRequestManager(database, config, backupManager, 
-				(sub, tit, bod) -> submitSelf(sub, tit, bod), (pmInfo) -> handleUserPMs(Collections.singletonList(pmInfo)));
+				(info) -> handleModmailPMs(Collections.singletonList(info)), (pmInfo) -> handleUserPMs(Collections.singletonList(pmInfo)));
 		
 		unbanRequestHandler.verifyHaveResponses();
 		propagator.verifyHaveResponses();
@@ -466,6 +466,9 @@ public class USLBotDriver extends BotDriver {
 	 */
 	protected boolean handlePropagateResult(PropagateResult result) {
 		boolean didSomething = false;
+		for(TraditionalScammer scammer : result.scammersToRemove) {
+			((USLDatabase)database).getTraditionalScammerMapping().deleteByPersonID(scammer.personID);
+		}
 		if(result.bans.size() > 0) {
 			didSomething = handleBans(result.bans) || didSomething;
 		}

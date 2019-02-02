@@ -81,7 +81,8 @@ public class USLPropagator {
 	public void verifyHaveResponses() {
 		verifyFormat(database, "propagated_ban_message", "This is the message that is sent to the user when they are banned",
 				"new subreddit", "The subreddit which they were just banned on",
-				"original subreddit", "The oldest subreddit with a non-bot ban for the user");
+				"original subreddit", "The oldest subreddit with a non-bot ban for the user",
+				"triggering tags", "Comma separated tags which are followed by the subreddit we are banning the user on");
 		
 		verifyFormat(database, "propagated_ban_note", "This is the note that only moderators can see for the ban",
 				"original subreddit", "The oldest subreddit with a non-bot ban for the user",
@@ -158,6 +159,17 @@ public class USLPropagator {
 				"user history", "Markup formatted information about the history of the person. See USLUserHistoryMarkupFormatter",
 				"banned at", "When the user was banned by the subreddit",
 				"ban note", "The note that the subreddit has about the user");
+		
+		verifyFormat(database, "propagate_ban_on_traditional_title", "The title of the PM to the USL (silent or not) to notify them that "
+				+ "a user who was traditionally banned is now conventionally banned",
+				"banned user", "The user which was previously on the traditional list but is no longer");
+		
+		verifyFormat(database, "propagate_ban_on_traditional_body", "The body of the PM to the subreddit (silent or not) to notify them that "
+				+ "they have replaced a traditional ban",
+				"banned user", "The user which was previously on the traditional list but is no longer",
+				"user history", "Markup formatted information about the history of the person. See USLUserHistoryMarkupFormatter",
+				"old ban note", "The traditional reason for being on the list",
+				"new tags", "The tags that the user is banned for");
 	}
 	
 	/**
@@ -191,10 +203,8 @@ public class USLPropagator {
 	 * @return the action by the bot that needs to take place.
 	 */
 	public PropagateResult propagateAction(HashMap<Integer, MonitoredSubreddit> readingSubreddits, USLAction action) {
-		TraditionalScammer tradScammer = database.getTraditionalScammerMapping().fetchByPersonID(action.personID);
-		if(tradScammer != null) // not our problem
-			return new PropagateResult(action);
-
+		PropagateResult result = new PropagateResult(action);
+		
 		String suppressNoOpMessVal = database.getPropagatorSettingMapping().get(PropagatorSettingKey.SUPPRESS_NO_OP_MESSAGES);
 		boolean suppressNoOpMess = false;
 		if(suppressNoOpMessVal == null) {
@@ -205,7 +215,47 @@ public class USLPropagator {
 		
 		Person pers = database.getPersonMapping().fetchByID(action.personID);
 		if(pers.username.equals("[deleted]"))
-			return new PropagateResult(action); // not a real user
+			return result; // not a real user
+
+		
+		TraditionalScammer tradScammer = database.getTraditionalScammerMapping().fetchByPersonID(action.personID);
+		if(tradScammer != null) {
+			if(tradScammer.createdAt.after(action.createdAt))
+				return result;
+			
+			List<USLActionHashtag> actionTags = database.getUSLActionHashtagMapping().fetchByUSLActionID(action.id);
+			if(actionTags.size() == 0)
+				return result;
+			
+			List<Hashtag> actionHashtags = new ArrayList<>();
+			for(USLActionHashtag actionTag : actionTags) {
+				actionHashtags.add(database.getHashtagMapping().fetchByID(actionTag.hashtagID));
+			}
+			
+			// We supersede the traditional list when the action is newer than the traditional list and includes tags
+			String titleFormat = database.getResponseMapping().fetchByName("propagate_ban_on_traditional_title").responseBody;
+			String bodyFormat = database.getResponseMapping().fetchByName("propagate_ban_on_traditional_body").responseBody;
+			
+			ResponseInfo respInfo = new ResponseInfo(ResponseInfoFactory.base);
+			respInfo.addLongtermString("banned user", pers.username);
+			respInfo.addTemporaryString("user history", USLHistoryMarkupFormatter.format(database, config, action.personID, false));
+			respInfo.addTemporaryString("old ban note", tradScammer.reason);
+			respInfo.addTemporaryString("new tags", actionHashtags.stream().map((a) -> a.tag).collect(Collectors.joining(", ")));
+			
+			String body = new ResponseFormatter(bodyFormat, respInfo).getFormattedResponse(config, database);
+			respInfo.clearTemporary();
+			String title = new ResponseFormatter(titleFormat, respInfo).getFormattedResponse(config, database);
+			
+			result = result.merge(new PropagateResult(action, 
+					Collections.emptyList(), Collections.emptyList(),
+					Collections.singletonList(new ModmailPMInformation(
+							database.getMonitoredSubredditMapping().fetchByName(config.getProperty("general.notifications_sub")),
+							title,
+							body
+							)), Collections.emptyList(), Collections.singletonList(tradScammer)
+					
+					));
+		}
 		
 		Person bot = database.getPersonMapping().fetchByUsername(config.getProperty("user.username"));
 		List<Integer> expBanOnIDs = database.getMonitoredSubredditMapping().fetchReadableIDsThatFollowActionsTags(action.id);
@@ -228,7 +278,6 @@ public class USLPropagator {
 		Set<Integer> subredditsNotYetHandled = new HashSet<Integer>();
 		subredditsNotYetHandled.addAll(readingSubreddits.keySet());
 		
-		PropagateResult result = new PropagateResult(action);
 		for(int expBanOn : expBanOnIDs) {
 			MonitoredSubreddit sub = readingSubreddits.get(expBanOn);
 			subredditsNotYetHandled.remove(expBanOn);
@@ -245,7 +294,7 @@ public class USLPropagator {
 		return result;
 	}
 	
-	private PropagateResult propagateWhenExpectBan(USLAction action, MonitoredSubreddit subreddit, String originalSubreddit,
+	private PropagateResult propagateWhenExpectBan(USLAction action, final MonitoredSubreddit subreddit, String originalSubreddit,
 			boolean suppressNoOpMess) {
 		Person bot = database.getPersonMapping().fetchByUsername(config.getProperty("user.username"));
 		final Person toBan = database.getPersonMapping().fetchByID(action.personID);
@@ -374,10 +423,9 @@ public class USLPropagator {
 		responseInfo.addLongtermString("banned user", toBan.username);
 		responseInfo.addLongtermString("original subreddit", originalSubreddit);
 		responseInfo.addLongtermString("new subreddit", subreddit.subreddit);
+		responseInfo.addLongtermString("triggering tags", getPrettyTriggeringTags(action, subreddit));
 		
 		String message = new ResponseFormatter(msgFormat, responseInfo).getFormattedResponse(config, database);
-		
-		responseInfo.addLongtermString("triggering tags", getPrettyTriggeringTags(action, subreddit));
 		
 		String note = new ResponseFormatter(noteFormat, responseInfo).getFormattedResponse(config, database);
 		

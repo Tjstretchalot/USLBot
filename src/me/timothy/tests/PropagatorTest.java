@@ -24,6 +24,7 @@ import me.timothy.bots.models.MonitoredSubreddit;
 import me.timothy.bots.models.Person;
 import me.timothy.bots.models.Response;
 import me.timothy.bots.models.SubscribedHashtag;
+import me.timothy.bots.models.TraditionalScammer;
 import me.timothy.bots.models.USLAction;
 import me.timothy.bots.models.USLActionBanHistory;
 import me.timothy.bots.models.USLActionHashtag;
@@ -48,6 +49,7 @@ public class PropagatorTest {
 	private MonitoredSubreddit sub1;
 	private MonitoredSubreddit sub2;
 	private MonitoredSubreddit sub3;
+	private MonitoredSubreddit notifs;
 	
 	private long now;
 	private int hmaCounter;
@@ -75,6 +77,9 @@ public class PropagatorTest {
 		
 		sub3 = new MonitoredSubreddit(-1, "sub3", true, false, false);
 		database.getMonitoredSubredditMapping().save(sub3);
+		
+		notifs = new MonitoredSubreddit(-1, config.getProperty("general.notifications_sub"), true, false, false);
+		database.getMonitoredSubredditMapping().save(notifs);
 		
 		hmaCounter = 0;
 	}
@@ -109,6 +114,8 @@ public class PropagatorTest {
 		database.getResponseMapping().save(new Response(-1, "propagate_unban_primary_modmail_body", "unban prim. body", now(), now()));
 		database.getResponseMapping().save(new Response(-1, "propagate_unban_failed_modmail_title", "unban failed", now(), now()));
 		database.getResponseMapping().save(new Response(-1, "propagate_unban_failed_modmail_body", "unban failed", now(), now()));
+		database.getResponseMapping().save(new Response(-1, "propagate_ban_on_traditional_title", "ban on traditional title", now(), now()));
+		database.getResponseMapping().save(new Response(-1, "propagate_ban_on_traditional_body", "ban on traditional body", now(), now()));
 	}
 	
 	private Timestamp now() {
@@ -218,6 +225,48 @@ public class PropagatorTest {
 		MysqlTestUtils.assertListContentsPreds(result.bans, 
 				((a) -> (a.person.equals(banned) && a.subreddit.equals(sub1))),
 				((a) -> (a.person.equals(banned) && a.subreddit.equals(sub3))));
+	}
+	
+	@Test
+	public void testReplacesTraditionalList() {
+		initResponses();
+		Hashtag scammer = scammerTag();
+		attach(sub1, scammer);
+		attach(sub2, scammer);
+		
+		TraditionalScammer trad = new TraditionalScammer(-1, banned.id, "asdf", "#scammer", new Timestamp(now - 10000));
+		database.getTraditionalScammerMapping().save(trad);
+		
+		USLAction action = action(true, banned, new Hashtag[] { scammer }, null, null);
+		
+		PropagateResult result = propagator.propagateAction(action);
+		MysqlTestUtils.assertListContentsPreds(result.bans, 
+				((a) -> (a.person.equals(banned) && a.subreddit.equals(sub1))),
+				((a) -> (a.person.equals(banned) && a.subreddit.equals(sub2))));
+		MysqlTestUtils.assertListContentsPreds(result.modmailPMs, 
+				(a) -> a.subreddit.id == notifs.id);
+		MysqlTestUtils.assertListContentsPreds(result.scammersToRemove, 
+				(a) -> a.id == trad.id);
+	}
+	
+	@Test
+	public void testOldBansDontSupersedeTraditionalList() {
+		initResponses();
+		Hashtag scammer = scammerTag();
+		attach(sub1, scammer);
+		
+		TraditionalScammer trad = new TraditionalScammer(-1, banned.id, "asdf", "#scammer", new Timestamp(now + 10000));
+		database.getTraditionalScammerMapping().save(trad);
+		
+		HandledModAction hma = hma(sub1);
+		BanHistory ban = bh(bot, banned, hma, "#scammer", true);
+		USLAction action = action(true, banned, null, new BanHistory[] { ban }, null);
+		
+		PropagateResult result = propagator.propagateAction(action);
+		MysqlTestUtils.assertListContentsPreds(result.bans);
+		MysqlTestUtils.assertListContentsPreds(result.unbans);
+		MysqlTestUtils.assertListContentsPreds(result.modmailPMs);
+		MysqlTestUtils.assertListContentsPreds(result.scammersToRemove);
 	}
 	
 	/**

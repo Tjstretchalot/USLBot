@@ -15,8 +15,9 @@ import me.timothy.bots.database.mysql.MysqlUSLActionBanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlUSLActionHashtagMapping;
 import me.timothy.bots.database.mysql.MysqlUSLActionMapping;
 import me.timothy.bots.database.mysql.MysqlUSLActionUnbanHistoryMapping;
+import me.timothy.bots.functions.SendModmailFunction;
 import me.timothy.bots.functions.SendPMFunction;
-import me.timothy.bots.functions.SubmitSelfFunction;
+import me.timothy.bots.memory.ModmailPMInformation;
 import me.timothy.bots.memory.UserPMInformation;
 import me.timothy.bots.models.RepropagationRequest;
 import me.timothy.bots.responses.ResponseFormatter;
@@ -38,15 +39,15 @@ public class USLRepropagationRequestManager {
 	protected USLDatabase database;
 	protected USLFileConfiguration config;
 	protected USLDatabaseBackupManager backupManager;
-	protected SubmitSelfFunction submitSelf;
+	protected SendModmailFunction notifySubreddit;
 	protected SendPMFunction sendPM;
 	
 	public USLRepropagationRequestManager(USLDatabase database, USLFileConfiguration config, USLDatabaseBackupManager backupManager,
-			SubmitSelfFunction submitSelf, SendPMFunction sendPM) {
+			SendModmailFunction sendModmail, SendPMFunction sendPM) {
 		this.database = database;
 		this.config = config;
 		this.backupManager = backupManager;
-		this.submitSelf = submitSelf;
+		this.notifySubreddit = sendModmail;
 		this.sendPM = sendPM;
 	}
 	
@@ -145,7 +146,7 @@ public class USLRepropagationRequestManager {
 		String postSub = config.getProperty("general.notifications_sub");
 		
 		sendPM.send(new UserPMInformation(requester, pmTitle, pmBody));
-		submitSelf.submitSelf(postSub, postTitle, postBody);
+		notifySubreddit.sendModmail(new ModmailPMInformation(database.getMonitoredSubredditMapping().fetchByName(postSub), postTitle, postBody));
 		
 		backupManager.forceBackup();
 		

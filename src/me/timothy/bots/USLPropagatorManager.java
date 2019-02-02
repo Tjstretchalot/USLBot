@@ -252,6 +252,7 @@ public class USLPropagatorManager {
 		USLActionMapping actMap = database.getUSLActionMapping();
 		
 		long start = System.currentTimeMillis();
+		
 		long finishTime = start + (1000 * 60 * 60 * 3);
 		
 		List<DirtyPerson> dirtyList = new ArrayList<>();

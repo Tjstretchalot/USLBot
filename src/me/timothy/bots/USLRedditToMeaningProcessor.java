@@ -99,6 +99,11 @@ public class USLRedditToMeaningProcessor {
 			if(extremeTrace) { logger.printf(Level.TRACE, "Attaching new ban"); }
 			
 			database.getUSLActionBanHistoryMapping().save(new USLActionBanHistory(latest.id, ban.id));
+			
+			if(ban.modPersonID == database.getPersonMapping().fetchByUsername(config.getProperty("user.username")).id) {
+				return Collections.emptySet();
+			}
+			
 			return Collections.singleton(latest.personID);
 		}
 		

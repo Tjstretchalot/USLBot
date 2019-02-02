@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import me.timothy.bots.models.TraditionalScammer;
 import me.timothy.bots.models.USLAction;
 
 /**
@@ -52,19 +53,40 @@ public class PropagateResult {
 	public final List<UserPMInformation> userPMs;
 	
 	/**
+	 * What users to remove from the traditional scammers table.
+	 */
+	public final List<TraditionalScammer> scammersToRemove;
+
+	/**
+	 * @param action the usl action that was considered
+	 * @param bans the bans that need to occur
+	 * @param unbans the unbans that need to occur
+	 * @param modmailPMs the modmail pms that need to be sent
+	 * @param userPMs the user pms that need to be sent
+	 * @param scammersToRemove the users that should be removed from the traditional list
+	 */
+	public PropagateResult(USLAction action, List<UserBanInformation> bans,
+			List<UserUnbanInformation> unbans, List<ModmailPMInformation> modmailPMs, 
+			List<UserPMInformation> userPMs, List<TraditionalScammer> scammersToRemove) {
+		this.action = action;
+		this.bans = bans;
+		this.unbans = unbans;
+		this.modmailPMs = modmailPMs;
+		this.userPMs = userPMs;
+		this.scammersToRemove = scammersToRemove;
+	}
+	
+	/**
 	 * @param action the usl action that was considered
 	 * @param bans the bans that need to occur because of this
+	 * @param unbans the unbans that need to occur
 	 * @param modmailPMs the modmail pms that need to occur because of this
 	 * @param userPMs the users to pm because of this
 	 */
 	public PropagateResult(USLAction action, List<UserBanInformation> bans,
 			List<UserUnbanInformation> unbans, List<ModmailPMInformation> modmailPMs, 
 			List<UserPMInformation> userPMs) {
-		this.action = action;
-		this.bans = bans;
-		this.unbans = unbans;
-		this.modmailPMs = modmailPMs;
-		this.userPMs = userPMs;
+		this(action, bans, unbans, modmailPMs, userPMs, Collections.emptyList());
 	}
 
 	/**
@@ -88,6 +110,7 @@ public class PropagateResult {
 		List<UserUnbanInformation> newUnbans;
 		List<ModmailPMInformation> newModPMs;
 		List<UserPMInformation> newUserPMs;
+		List<TraditionalScammer> newScammers;
 		
 		if(bans.isEmpty()) {
 			newBans = other.bans;
@@ -130,7 +153,17 @@ public class PropagateResult {
 			newUserPMs.addAll(other.userPMs);
 		}
 		
-		return new PropagateResult(action, newBans, newUnbans, newModPMs, newUserPMs);
+		if(scammersToRemove.isEmpty()) {
+			newScammers = other.scammersToRemove;
+		}else if(other.scammersToRemove.isEmpty()) {
+			newScammers = scammersToRemove;
+		}else {
+			newScammers = new ArrayList<>(scammersToRemove.size() + other.scammersToRemove.size());
+			newScammers.addAll(scammersToRemove);
+			newScammers.addAll(other.scammersToRemove);
+		}
+		
+		return new PropagateResult(action, newBans, newUnbans, newModPMs, newUserPMs, newScammers);
 	}
 
 	@Override
@@ -140,6 +173,7 @@ public class PropagateResult {
 		result = prime * result + ((action == null) ? 0 : action.hashCode());
 		result = prime * result + ((bans == null) ? 0 : bans.hashCode());
 		result = prime * result + ((modmailPMs == null) ? 0 : modmailPMs.hashCode());
+		result = prime * result + ((scammersToRemove == null) ? 0 : scammersToRemove.hashCode());
 		result = prime * result + ((unbans == null) ? 0 : unbans.hashCode());
 		result = prime * result + ((userPMs == null) ? 0 : userPMs.hashCode());
 		return result;
@@ -147,57 +181,49 @@ public class PropagateResult {
 
 	@Override
 	public boolean equals(Object obj) {
-		if (this == obj) {
+		if (this == obj)
 			return true;
-		}
-		if (obj == null) {
+		if (obj == null)
 			return false;
-		}
-		if (getClass() != obj.getClass()) {
+		if (getClass() != obj.getClass())
 			return false;
-		}
 		PropagateResult other = (PropagateResult) obj;
 		if (action == null) {
-			if (other.action != null) {
+			if (other.action != null)
 				return false;
-			}
-		} else if (!action.equals(other.action)) {
+		} else if (!action.equals(other.action))
 			return false;
-		}
 		if (bans == null) {
-			if (other.bans != null) {
+			if (other.bans != null)
 				return false;
-			}
-		} else if (!bans.equals(other.bans)) {
+		} else if (!bans.equals(other.bans))
 			return false;
-		}
 		if (modmailPMs == null) {
-			if (other.modmailPMs != null) {
+			if (other.modmailPMs != null)
 				return false;
-			}
-		} else if (!modmailPMs.equals(other.modmailPMs)) {
+		} else if (!modmailPMs.equals(other.modmailPMs))
 			return false;
-		}
+		if (scammersToRemove == null) {
+			if (other.scammersToRemove != null)
+				return false;
+		} else if (!scammersToRemove.equals(other.scammersToRemove))
+			return false;
 		if (unbans == null) {
-			if (other.unbans != null) {
+			if (other.unbans != null)
 				return false;
-			}
-		} else if (!unbans.equals(other.unbans)) {
+		} else if (!unbans.equals(other.unbans))
 			return false;
-		}
 		if (userPMs == null) {
-			if (other.userPMs != null) {
+			if (other.userPMs != null)
 				return false;
-			}
-		} else if (!userPMs.equals(other.userPMs)) {
+		} else if (!userPMs.equals(other.userPMs))
 			return false;
-		}
 		return true;
 	}
 
 	@Override
 	public String toString() {
 		return "PropagateResult [action=" + action + ", bans=" + bans + ", unbans=" + unbans + ", modmailPMs="
-				+ modmailPMs + ", userPMs=" + userPMs + "]";
+				+ modmailPMs + ", userPMs=" + userPMs + ", scammersToRemove=" + scammersToRemove + "]";
 	}
 }

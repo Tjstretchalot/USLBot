@@ -40,4 +40,5 @@ public interface MappingDatabase {
 	public PropagatorSettingMapping getPropagatorSettingMapping();
 	public MonitoredSubredditAltModMailMapping getMonitoredSubredditAltModMailMapping();
 	public RepropagationRequestMapping getRepropagationRequestMapping();
+	public SubredditPersonBannedReleaseMapping getSubredditPersonBannedReleaseMapping();
 }
