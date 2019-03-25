@@ -13,3 +13,4 @@ hs_err_pid*
 
 # These are configuration files
 tests/*
+/bin/

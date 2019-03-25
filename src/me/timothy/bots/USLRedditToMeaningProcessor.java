@@ -173,6 +173,12 @@ public class USLRedditToMeaningProcessor {
 			if(extremeTrace) { logger.printf(Level.TRACE, "Skipping; not permanent"); }
 			return Collections.emptySet();
 		}
+
+		Person bannedPerson = database.getPersonMapping().fetchByID(ban.bannedPersonID);
+		if(bannedPerson.username.equals("[deleted]")) {
+			if(extremeTrace) { logger.printf(Level.TRACE, "Skipping since this is [deleted]"); }
+			return Collections.emptySet();
+		}
 		
 		if(ban.banDescription == null) 
 			throw new NullPointerException("ban description is null!");
@@ -199,7 +205,6 @@ public class USLRedditToMeaningProcessor {
 			if(extremeTrace) { logger.printf(Level.TRACE, "Skipping; no relevant tags and no existing action"); }
 			return Collections.emptySet();
 		}
-		
 		if(extremeTrace) { logger.printf(Level.TRACE, "Creating first action for this user"); }
 		
 		USLAction action = database.getUSLActionMapping().create(true, ban.bannedPersonID, modAction.occurredAt);
@@ -276,6 +281,12 @@ public class USLRedditToMeaningProcessor {
 		
 		if(latest == null) {
 			if(extremeTrace) { logger.printf(Level.TRACE, "Skipping; no active action for this person"); }
+			return Collections.emptySet();
+		}
+
+		Person unbannedPerson = database.getPersonMapping().fetchByID(unban.unbannedPersonID);
+		if(unbannedPerson.username.equals("[deleted]")) {
+			if(extremeTrace) { logger.printf(Level.TRACE, "Skipping since this is [deleted]"); }
 			return Collections.emptySet();
 		}
 		

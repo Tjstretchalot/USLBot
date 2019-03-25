@@ -34,6 +34,10 @@ public class UserPMInformation {
 	 */
 	public UserPMInformation(Person person, String title, String body, Runnable... callbacks) {
 		super();
+		if(!person.username.equals(person.username.trim())) {
+			throw new RuntimeException("bad username for person " + person.id + " (username = '" + person.username + "')");
+		}
+		
 		this.person = person;
 		this.title = title;
 		this.body = body;

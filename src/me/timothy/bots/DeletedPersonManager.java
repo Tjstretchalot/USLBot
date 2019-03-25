@@ -38,6 +38,10 @@ public class DeletedPersonManager {
 	}
 	
 	public boolean isDeleted(String user) {
+		if(!user.equals(user.trim())) {
+			throw new RuntimeException("bad username: '" + user + "'");
+		}
+		
 		long now = System.currentTimeMillis();
 		if(now > nextPruneTime) {
 			prune();
@@ -60,6 +64,10 @@ public class DeletedPersonManager {
 	}
 	
 	protected boolean checkNoMemoryCacheAndCache(String user) {
+		if(!user.equals(user.trim())) {
+			throw new RuntimeException("bad username: '" + user + "'");
+		}
+		
 		Person pers = database.getPersonMapping().fetchByUsername(user);
 		if(pers == null || !database.getDeletedPersonMapping().contains(pers.id)) {
 			return reallyCheckAndCache(user);
@@ -69,6 +77,10 @@ public class DeletedPersonManager {
 	}
 	
 	protected boolean reallyCheckAndCache(String user) {
+		if(!user.equals(user.trim())) {
+			throw new RuntimeException("bad username: '" + user + "'");
+		}
+		
 		boolean deleted = reallyCheckIsDeleted(user);
 		if(deleted) {
 			Person pers = database.getPersonMapping().fetchOrCreateByUsername(user);
@@ -95,6 +107,10 @@ public class DeletedPersonManager {
 	}
 	
 	protected boolean reallyCheckIsDeleted(String user) {
+		if(!user.equals(user.trim())) {
+			throw new RuntimeException("bad username: '" + user + "'");
+		}
+		
 		Account[] result = new Account[1];
 		new Retryable<Boolean>("Get Account", maybeLoginAgainRunnable) {
 
