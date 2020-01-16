@@ -455,7 +455,7 @@ public class USLPropagator {
 			// the subreddit. Thus we do nothing.
 			return new PropagateResult(action);
 		}
-
+		
 		HandledModAction hma = database.getHandledModActionMapping().fetchByID(ban.handledModActionID);
 		if(hma.occurredAt.after(action.createdAt)) {
 			// We don't override bans from the future!

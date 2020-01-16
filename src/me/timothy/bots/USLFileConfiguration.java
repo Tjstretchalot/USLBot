@@ -44,6 +44,8 @@ public class USLFileConfiguration extends FileConfiguration {
 		addProperties("temp_auth_granter", true, "max_requests_per_loop", "subreddit", "auth_level_verified", 
 				"duration_verified_ms", "min_retry_elapsed_ms");
 		addProperties("reddit_to_meaning", true, "extreme_trace");
+		addProperties("hwswapuser", true, "username", "password", "appClientID", "appClientSecret");
+		addProperties("hwswap", true, "savepath", "max_bans_per_loop", "bansub");
 	}
 	
 }

@@ -38,7 +38,8 @@ import org.junit.runners.Suite.SuiteClasses;
 			MysqlDeletedPersonMappingTest.class,
 			MysqlPropagatorSettingMappingTest.class,
 			MysqlMonitoredSubredditAltModMailMappingTest.class,
-			MysqlSubredditPersonBannedReleaseMappingTest.class
+			MysqlSubredditPersonBannedReleaseMappingTest.class,
+			MysqlHardwareSwapBanMappingTest.class
 		})
 public class MysqlDatabaseTests {
 

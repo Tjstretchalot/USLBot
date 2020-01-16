@@ -41,4 +41,6 @@ public interface MappingDatabase {
 	public MonitoredSubredditAltModMailMapping getMonitoredSubredditAltModMailMapping();
 	public RepropagationRequestMapping getRepropagationRequestMapping();
 	public SubredditPersonBannedReleaseMapping getSubredditPersonBannedReleaseMapping();
+	public HardwareSwapBanMapping getHardwareSwapBanMapping();
+	public HardwareSwapActionMapping getHardwareSwapActionMapping();
 }

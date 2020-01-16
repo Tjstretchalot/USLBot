@@ -118,7 +118,7 @@ public class USLReverseSubScanner {
 
 			@Override
 			protected Listing runImpl() throws Exception {
-				return RedditUtils.getModeratorLog(subreddit.subreddit, null, null, modActionID, null, ACTIONS_PER_PAGE, bot.getUser());
+				 return RedditUtils.getModeratorLog(subreddit.subreddit, null, null, modActionID, null, ACTIONS_PER_PAGE, bot.getUser());
 			}
 			
 		}.run();

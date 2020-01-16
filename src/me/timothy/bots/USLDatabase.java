@@ -21,6 +21,8 @@ import me.timothy.bots.database.DirtyPersonMapping;
 import me.timothy.bots.database.FullnameMapping;
 import me.timothy.bots.database.HandledAtTimestampMapping;
 import me.timothy.bots.database.HandledModActionMapping;
+import me.timothy.bots.database.HardwareSwapActionMapping;
+import me.timothy.bots.database.HardwareSwapBanMapping;
 import me.timothy.bots.database.HashtagMapping;
 import me.timothy.bots.database.LastInfoPMMapping;
 import me.timothy.bots.database.MappingDatabase;
@@ -60,6 +62,8 @@ import me.timothy.bots.database.mysql.MysqlBanHistoryMapping;
 import me.timothy.bots.database.mysql.MysqlDeletedPersonMapping;
 import me.timothy.bots.database.mysql.MysqlFullnameMapping;
 import me.timothy.bots.database.mysql.MysqlHandledModActionMapping;
+import me.timothy.bots.database.mysql.MysqlHardwareSwapActionMapping;
+import me.timothy.bots.database.mysql.MysqlHardwareSwapBanMapping;
 import me.timothy.bots.database.mysql.MysqlHashtagMapping;
 import me.timothy.bots.database.mysql.MysqlLastInfoPMMapping;
 import me.timothy.bots.database.mysql.MysqlMonitoredSubredditAltModMailMapping;
@@ -94,6 +98,8 @@ import me.timothy.bots.models.DirtyPerson;
 import me.timothy.bots.models.Fullname;
 import me.timothy.bots.models.HandledAtTimestamp;
 import me.timothy.bots.models.HandledModAction;
+import me.timothy.bots.models.HardwareSwapAction;
+import me.timothy.bots.models.HardwareSwapBan;
 import me.timothy.bots.models.Hashtag;
 import me.timothy.bots.models.LastInfoPM;
 import me.timothy.bots.models.MonitoredSubreddit;
@@ -194,6 +200,8 @@ public class USLDatabase extends Database implements MappingDatabase {
 		addMapping(PropagatorSetting.class, new MysqlPropagatorSettingMapping(this, connection));
 		addMapping(RepropagationRequest.class, new MysqlRepropagationRequestMapping(this, connection));
 		addMapping(SubredditPersonBannedRelease.class, new MysqlSubredditPersonBannedReleaseMapping(this, connection));
+		addMapping(HardwareSwapBan.class, new MysqlHardwareSwapBanMapping(this, connection));
+		addMapping(HardwareSwapAction.class, new MysqlHardwareSwapActionMapping(this, connection));
 		
 		addCustomMapping(HandledAtTimestamp.class, new CustomHandledAtTimestampMapping(this, Paths.get(flatFileFolder.getPath(), "handled_at_timestamps.dat").toFile()));
 		addCustomMapping(DirtyPerson.class, new CustomDirtyPersonMapping(Paths.get(flatFileFolder.getPath(), "dirty_persons.dat").toFile()));
@@ -477,6 +485,16 @@ public class USLDatabase extends Database implements MappingDatabase {
 	@Override
 	public SubredditPersonBannedReleaseMapping getSubredditPersonBannedReleaseMapping() {
 		return (SubredditPersonBannedReleaseMapping) mappingsDict.get(SubredditPersonBannedRelease.class);
+	}
+	
+	@Override
+	public HardwareSwapBanMapping getHardwareSwapBanMapping() {
+		return (HardwareSwapBanMapping) mappingsDict.get(HardwareSwapBan.class);
+	}
+
+	@Override
+	public HardwareSwapActionMapping getHardwareSwapActionMapping() {
+		return (HardwareSwapActionMapping) mappingsDict.get(HardwareSwapAction.class);
 	}
 
 	/**

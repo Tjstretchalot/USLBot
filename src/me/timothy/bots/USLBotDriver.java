@@ -6,6 +6,7 @@ import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.Level;
@@ -33,6 +34,9 @@ import me.timothy.bots.summon.LinkSummon;
 import me.timothy.bots.summon.PMSummon;
 import me.timothy.jreddit.RedditUtils;
 import me.timothy.jreddit.info.Account;
+import me.timothy.jreddit.info.Listing;
+import me.timothy.jreddit.info.ModeratorListing;
+import me.timothy.jreddit.info.ModeratorUserInfo;
 
 /**
  * The bot driver for the universal scammer list bot. Contains
@@ -59,6 +63,9 @@ public class USLBotDriver extends BotDriver {
 	protected USLTemporaryAuthGranter taHandler;
 	protected DeletedPersonManager deletedPersonManager;
 	protected USLRepropagationRequestManager repropManager;
+	protected HardwareSwapManager hwsManager;
+	/** The id of the bot user, without the t2_ prefix */
+	protected String botUserId;
 	
 	static {
 		BotDriver.BRIEF_PAUSE_MS = 2000;
@@ -95,6 +102,7 @@ public class USLBotDriver extends BotDriver {
 		deletedPersonManager = new DeletedPersonManager(database, this, maybeLoginAgainRunnable);
 		repropManager = new USLRepropagationRequestManager(database, config, backupManager, 
 				(info) -> handleModmailPMs(Collections.singletonList(info)), (pmInfo) -> handleUserPMs(Collections.singletonList(pmInfo)));
+		hwsManager = new HardwareSwapManager(database, config, new Bot("hardwareswap"), deletedPersonManager);
 		
 		unbanRequestHandler.verifyHaveResponses();
 		propagator.verifyHaveResponses();
@@ -107,6 +115,12 @@ public class USLBotDriver extends BotDriver {
 		al.clear();
 		
 		al.append("{SIGSTART}");
+		if(botUserId == null) {
+			al.append("Fetching bot user id...");
+			logger.info("Fetching bot user id...");
+			fetchBotUserId();
+			logger.printf(Level.TRACE, "The bots user id is %s", botUserId); 
+		}
 		
 		al.append("Considering relogging in..");
 		logger.trace("Considering relogging in..");
@@ -154,12 +168,24 @@ public class USLBotDriver extends BotDriver {
 		logger.trace("Propagating bans..");
 		propagateBans();
 		
+		hwsManager.doLoop();
+		
 		al.append("Considering backing up database..");
 		logger.trace("Considering backing up database..");
 		considerBackupDatabase();
 		al = ((USLDatabase)database).getActionLogMapping();
 		
 		al.append("Waiting for a bit..");
+	}
+	
+	/**
+	 * Fetch the bot user id and store it in botUserId
+	 */
+	protected void fetchBotUserId() {
+		Account botAcc = getAccount(bot.getUser().getUsername());
+		botUserId = botAcc.id();
+		if(botUserId.startsWith("t2_"))
+			botUserId = botUserId.substring(3);
 	}
 
 	/**
@@ -240,7 +266,7 @@ public class USLBotDriver extends BotDriver {
 		monitoredSubreddits = db.getMonitoredSubredditMapping().fetchAll();
 		for(int i = monitoredSubreddits.size() - 1; i >= 0; i--) {
 			MonitoredSubreddit ms = monitoredSubreddits.get(i);
-			if(ms.readOnly && ms.writeOnly) {
+			if((ms.readOnly && ms.writeOnly) || !this.checkForSufficientPerms(ms.subreddit)) {
 				monitoredSubreddits.remove(i);
 			}
 		}
@@ -633,6 +659,30 @@ public class USLBotDriver extends BotDriver {
 			}
 		}
 		sendMessage("/r/" + sub, title, body);
+	}
+	
+	/**
+	 * Determines if the bot has sufficient permissions to work with the given subreddit
+	 * @param sub the subreddit to check
+	 * @return true if the bot has sufficient permissions for the subreddit, false otherwise
+	 */
+	protected boolean checkForSufficientPerms(String sub) {
+		ModeratorListing mods = new Retryable<ModeratorListing>("checkForSufficientPerms(" + sub + ")") {
+			
+			@Override
+			protected ModeratorListing runImpl() throws Exception {
+				return RedditUtils.getModeratorForSubredditByName(sub, bot.getUser().getUsername(), bot.getUser());
+			}
+			
+		}.run();
+		sleepFor(BRIEF_PAUSE_MS);
+		
+		for(int i = 0, len = mods.numChildren(); i < len; i++) {
+			ModeratorUserInfo info = mods.getModerator(i);
+			if(botUserId.equals(info.id()))
+				return true;
+		}
+		return false;
 	}
 	
 	/**
