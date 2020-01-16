@@ -6,7 +6,6 @@ import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.Level;
@@ -34,7 +33,6 @@ import me.timothy.bots.summon.LinkSummon;
 import me.timothy.bots.summon.PMSummon;
 import me.timothy.jreddit.RedditUtils;
 import me.timothy.jreddit.info.Account;
-import me.timothy.jreddit.info.Listing;
 import me.timothy.jreddit.info.ModeratorListing;
 import me.timothy.jreddit.info.ModeratorUserInfo;
 
@@ -266,7 +264,14 @@ public class USLBotDriver extends BotDriver {
 		monitoredSubreddits = db.getMonitoredSubredditMapping().fetchAll();
 		for(int i = monitoredSubreddits.size() - 1; i >= 0; i--) {
 			MonitoredSubreddit ms = monitoredSubreddits.get(i);
-			if((ms.readOnly && ms.writeOnly) || !this.checkForSufficientPerms(ms.subreddit)) {
+			if(ms.readOnly && ms.writeOnly) {
+				logger.printf(Level.TRACE, "Removed /r/%s from tracked subreddits in memory (write + read only)", ms.subreddit);
+				monitoredSubreddits.remove(i);
+			}else if(!this.checkForSufficientPerms(ms.subreddit)) {
+				logger.printf(Level.TRACE, "Flagging /r/%s as read+write only and removing from tracked subreddits in memory (we are not a moderator there)", ms.subreddit);
+				ms.readOnly = true;
+				ms.writeOnly = true;
+				db.getMonitoredSubredditMapping().save(ms);
 				monitoredSubreddits.remove(i);
 			}
 		}
@@ -679,9 +684,13 @@ public class USLBotDriver extends BotDriver {
 		
 		for(int i = 0, len = mods.numChildren(); i < len; i++) {
 			ModeratorUserInfo info = mods.getModerator(i);
-			if(botUserId.equals(info.id()))
+			if(botUserId.equals(info.id())) {
+				logger.printf(Level.TRACE, "We have moderator permissions on %s", sub);
 				return true;
+			}
 		}
+		
+		logger.printf(Level.TRACE, "We do not have moderator permissions on %s", sub);
 		return false;
 	}
 	
