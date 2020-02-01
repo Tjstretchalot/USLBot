@@ -71,6 +71,7 @@ public class USLRegisterAccountRequestManager {
 				
 				if(req.createdAt.before(oldestAllowed)) {
 					logger.printf(Level.INFO, "Skipping register account request from /u/%s - did not get to it in time", person.username);
+					req.sentAt = new Timestamp(System.currentTimeMillis());
 					database.getRegisterAccountRequestMapping().save(req);
 					skips++;
 					continue;

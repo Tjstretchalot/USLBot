@@ -128,12 +128,12 @@ public class USLBotDriver extends BotDriver {
 		logger.trace("Considering relogging in..");
 		maybeLoginAgain();
 		
-		logger.trace("Updating tracked subreddits..");
-		updateTrackedSubreddits();
-		
 		al.append("Sending out account request messages..");
 		logger.trace("Sending out account request messages..");
 		sendAccountRequestMessages();
+		
+		logger.trace("Updating tracked subreddits..");
+		updateTrackedSubreddits();
 		
 		al.append("Sending out reset password messages..");
 		logger.trace("Sending out reset password messages..");
