@@ -4,6 +4,10 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import me.timothy.bots.memory.UserPMInformation;
 import me.timothy.bots.models.Person;
 import me.timothy.bots.models.RegisterAccountRequest;
@@ -18,8 +22,11 @@ import me.timothy.bots.responses.ResponseInfoFactory;
  * @author Timothy
  */
 public class USLRegisterAccountRequestManager {
+	private static final Logger logger = LogManager.getLogger();
+	
 	protected USLDatabase database;
 	protected USLFileConfiguration config;
+	protected DeletedPersonManager deletedPersons;
 	
 	/**
 	 * Initialize the account request manager attached to the specified 
@@ -28,31 +35,66 @@ public class USLRegisterAccountRequestManager {
 	 * @param db the database
 	 * @param cfg the config
 	 */
-	public USLRegisterAccountRequestManager(USLDatabase db, USLFileConfiguration cfg) 
+	public USLRegisterAccountRequestManager(USLDatabase db, USLFileConfiguration cfg, DeletedPersonManager deletedPersons) 
 	{
 		this.database = db;
 		this.config = cfg;
+		this.deletedPersons = deletedPersons;
 	}
 	
 	/**
 	 * Determines what account request messages to send out
 	 * 
+	 * @param limit The maximum number of pms to return
 	 * @return the pms to send out
 	 */
 	public List<UserPMInformation> sendRegisterAccountRequests() {
-		List<RegisterAccountRequest> requests = database.getRegisterAccountRequestMapping().fetchUnsent(3);
-		
-		List<UserPMInformation> pms = new ArrayList<>();
-		
-		for(RegisterAccountRequest req : requests) {
-			Person person = database.getPersonMapping().fetchByID(req.personID);
-			
-			if(person.passwordHash != null) {
-				pms.add(getPMToAlreadyClaimedAccount(req, person));
-			}else {
-				pms.add(getPMToClaimAccount(req, person));
+		int limit = 3;
+		String prop = config.getProperty("register_account_requests.limit_per_loop");
+		if (prop != null) {
+			try {
+				limit = Integer.valueOf(prop);
+			}catch(NumberFormatException e) {
+				logger.catching(e);
 			}
 		}
+		
+		
+		List<UserPMInformation> pms = new ArrayList<>();
+		while(true) {
+			int skips = 0;
+			List<RegisterAccountRequest> requests = database.getRegisterAccountRequestMapping().fetchUnsent(limit);
+			
+			Timestamp oldestAllowed = new Timestamp(System.currentTimeMillis() - 1000 * 60 * 60 * 24 * 7);
+			for(RegisterAccountRequest req : requests) {
+				Person person = database.getPersonMapping().fetchByID(req.personID);
+				
+				if(req.createdAt.before(oldestAllowed)) {
+					logger.printf(Level.INFO, "Skipping register account request from /u/%s - did not get to it in time", person.username);
+					database.getRegisterAccountRequestMapping().save(req);
+					skips++;
+					continue;
+				}
+				if(deletedPersons.isDeleted(person.username)) {
+					logger.printf(Level.INFO, "Skipping register account request from deleted user /u/%s", person.username);
+					req.sentAt = new Timestamp(System.currentTimeMillis());
+					database.getRegisterAccountRequestMapping().save(req);
+					skips++;
+					continue;
+				}
+				
+				if(person.passwordHash != null) {
+					pms.add(getPMToAlreadyClaimedAccount(req, person));
+				}else {
+					pms.add(getPMToClaimAccount(req, person));
+				}
+			}
+			
+			if(skips < limit)
+				break;
+			logger.printf(Level.DEBUG, "Register account request manager skipped all requests we fetched - retrying (limit=%d)", limit);
+		}
+		logger.printf(Level.DEBUG, "Register account manager found %d requests (limit=%d)", pms.size(), limit);
 		
 		return pms;
 	}

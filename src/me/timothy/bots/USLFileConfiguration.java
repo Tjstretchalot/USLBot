@@ -46,6 +46,7 @@ public class USLFileConfiguration extends FileConfiguration {
 		addProperties("reddit_to_meaning", true, "extreme_trace");
 		addProperties("hwswapuser", true, "username", "password", "appClientID", "appClientSecret");
 		addProperties("hwswap", true, "savepath", "max_bans_per_loop", "bansub");
+		addProperties("register_account_requests", false, "limit_per_loop");
 	}
 	
 }

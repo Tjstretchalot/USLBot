@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.simple.parser.ParseException;
 
 import me.timothy.bots.database.ActionLogMapping;
@@ -44,6 +46,8 @@ import me.timothy.jreddit.info.ModeratorUserInfo;
  * @author Timothy Moore
  */
 public class USLBotDriver extends BotDriver {
+	private static final Logger logger = LogManager.getLogger();
+	
 	/**
 	 * It's quite painful to pass this around. This simply calls
 	 * maybeLoginAgain on the singleton of USLBotDriver
@@ -94,10 +98,10 @@ public class USLBotDriver extends BotDriver {
 				(result) -> handlePropagateResult(result));
 		unbanRequestHandler = new USLUnbanRequestHandler(database, config, (sub, person) -> isModerator(sub, person));
 		scammerHandler = new USLTraditionalScammerHandler(database, config);
-		raqManager = new USLRegisterAccountRequestManager(database, config);
+		deletedPersonManager = new DeletedPersonManager(database, this, maybeLoginAgainRunnable);
+		raqManager = new USLRegisterAccountRequestManager(database, config, deletedPersonManager);
 		rprManager = new USLResetPasswordRequestManager(database, config);
 		taHandler = new USLTemporaryAuthGranter(database, config, (sub, person) -> isModerator(sub, person), (result) -> handleTempAuthResult(result));
-		deletedPersonManager = new DeletedPersonManager(database, this, maybeLoginAgainRunnable);
 		repropManager = new USLRepropagationRequestManager(database, config, backupManager, 
 				(info) -> handleModmailPMs(Collections.singletonList(info)), (pmInfo) -> handleUserPMs(Collections.singletonList(pmInfo)));
 		hwsManager = new HardwareSwapManager(database, config, new Bot("hardwareswap"), deletedPersonManager);
