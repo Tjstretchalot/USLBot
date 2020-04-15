@@ -91,7 +91,7 @@ public class USLBotDriver extends BotDriver {
 		super(database, config, bot, commentSummons, pmSummons, submissionSummons);
 		
 		IsModeratorFunction isMod = (sub, person) -> isModerator(sub, person);
-		for(CommentSummon sum : commentSummons) {
+		for(PMSummon sum : pmSummons) {
 			if (sum instanceof AuthCheckingSummon) {
 				((AuthCheckingSummon)sum).setIsModerator(isMod);
 			}

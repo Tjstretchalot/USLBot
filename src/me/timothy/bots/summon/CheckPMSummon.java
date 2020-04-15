@@ -4,6 +4,9 @@ import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import me.timothy.bots.Database;
 import me.timothy.bots.FileConfiguration;
 import me.timothy.bots.USLDatabase;
@@ -27,6 +30,8 @@ import me.timothy.jreddit.info.Message;
  * @author Timothy
  */
 public class CheckPMSummon implements PMSummon, AuthCheckingSummon {
+	private static Logger logger = LogManager.getLogger();
+	
 	/**
 	 * The pattern we check for
 	 */
@@ -45,7 +50,9 @@ public class CheckPMSummon implements PMSummon, AuthCheckingSummon {
 		USLDatabase database = (USLDatabase)db;
 		Matcher matcher = CHECK_PATTERN.matcher(message.body());
 		
-		if(!isMod.isModerator(config.getProperty("user.main_sub"), message.author())) {
+		String mainSub = config.getProperty("user.main_sub");
+		String author = message.author();
+		if(!isMod.isModerator(mainSub, author)) {
 			return null;
 		}
 		
@@ -77,6 +84,7 @@ public class CheckPMSummon implements PMSummon, AuthCheckingSummon {
 
 	@Override
 	public void setIsModerator(IsModeratorFunction isMod) {
+		logger.debug("CheckPMSummon setting isMod! null? " + (isMod == null ? "yes" : "no"));
 		this.isMod = isMod;
 	}
 
