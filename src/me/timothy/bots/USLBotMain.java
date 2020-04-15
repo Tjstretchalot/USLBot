@@ -8,6 +8,7 @@ import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import me.timothy.bots.summon.CheckPMSummon;
 import me.timothy.bots.summon.CommentSummon;
 import me.timothy.bots.summon.LinkSummon;
 import me.timothy.bots.summon.PMSummon;
@@ -65,7 +66,8 @@ public class USLBotMain {
 		BotDriver driver = new USLBotDriver(database, config, uslBot,
 				new CommentSummon[] { }, 
 				new PMSummon[] { 
-						new UnbanRequestPMSummon()
+						new UnbanRequestPMSummon(),
+						new CheckPMSummon()
 				},
 				new LinkSummon[] { });
 		

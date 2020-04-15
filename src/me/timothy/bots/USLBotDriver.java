@@ -14,6 +14,7 @@ import org.apache.logging.log4j.Logger;
 import org.json.simple.parser.ParseException;
 
 import me.timothy.bots.database.ActionLogMapping;
+import me.timothy.bots.functions.IsModeratorFunction;
 import me.timothy.bots.memory.ModmailPMInformation;
 import me.timothy.bots.memory.PropagateResult;
 import me.timothy.bots.memory.TemporaryAuthGranterResult;
@@ -30,6 +31,7 @@ import me.timothy.bots.models.SubredditModqueueProgress;
 import me.timothy.bots.models.SubredditTraditionalListStatus;
 import me.timothy.bots.models.TraditionalScammer;
 import me.timothy.bots.models.UnbanRequest;
+import me.timothy.bots.summon.AuthCheckingSummon;
 import me.timothy.bots.summon.CommentSummon;
 import me.timothy.bots.summon.LinkSummon;
 import me.timothy.bots.summon.PMSummon;
@@ -88,6 +90,13 @@ public class USLBotDriver extends BotDriver {
 			PMSummon[] pmSummons, LinkSummon[] submissionSummons) {
 		super(database, config, bot, commentSummons, pmSummons, submissionSummons);
 		
+		IsModeratorFunction isMod = (sub, person) -> isModerator(sub, person);
+		for(CommentSummon sum : commentSummons) {
+			if (sum instanceof AuthCheckingSummon) {
+				((AuthCheckingSummon)sum).setIsModerator(isMod);
+			}
+		}
+		
 		sMaybeLoginAgainRunnable = maybeLoginAgainRunnable;
 		
 		backupManager = new USLDatabaseBackupManager(database, config);
@@ -96,12 +105,12 @@ public class USLBotDriver extends BotDriver {
 				new USLRedditToMeaningProcessor(database, config),
 				new USLValidUnbanRequestToMeaningProcessor(database, config),
 				(result) -> handlePropagateResult(result));
-		unbanRequestHandler = new USLUnbanRequestHandler(database, config, (sub, person) -> isModerator(sub, person));
+		unbanRequestHandler = new USLUnbanRequestHandler(database, config, isMod);
 		scammerHandler = new USLTraditionalScammerHandler(database, config);
 		deletedPersonManager = new DeletedPersonManager(database, this, maybeLoginAgainRunnable);
 		raqManager = new USLRegisterAccountRequestManager(database, config, deletedPersonManager);
 		rprManager = new USLResetPasswordRequestManager(database, config);
-		taHandler = new USLTemporaryAuthGranter(database, config, (sub, person) -> isModerator(sub, person), (result) -> handleTempAuthResult(result));
+		taHandler = new USLTemporaryAuthGranter(database, config, isMod, (result) -> handleTempAuthResult(result));
 		repropManager = new USLRepropagationRequestManager(database, config, backupManager, 
 				(info) -> handleModmailPMs(Collections.singletonList(info)), (pmInfo) -> handleUserPMs(Collections.singletonList(pmInfo)));
 		hwsManager = new HardwareSwapManager(database, config, new Bot("hardwareswap"), deletedPersonManager);
