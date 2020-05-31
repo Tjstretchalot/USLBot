@@ -11,6 +11,8 @@ import java.util.stream.Collectors;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
 import org.json.simple.parser.ParseException;
 
 import me.timothy.bots.database.ActionLogMapping;
@@ -687,9 +689,22 @@ public class USLBotDriver extends BotDriver {
 	protected boolean checkForSufficientPerms(String sub) {
 		ModeratorListing mods = new Retryable<ModeratorListing>("checkForSufficientPerms(" + sub + ")") {
 			
+			@SuppressWarnings("unchecked")
 			@Override
 			protected ModeratorListing runImpl() throws Exception {
-				return RedditUtils.getModeratorForSubredditByName(sub, bot.getUser().getUsername(), bot.getUser());
+				try {
+					return RedditUtils.getModeratorForSubredditByName(sub, bot.getUser().getUsername(), bot.getUser());
+				} catch(IOException ex) {
+					if (ex.getMessage().contains("403 for URL")) {
+						JSONObject obj = new JSONObject();
+						JSONObject data = new JSONObject();
+						obj.put("data", data);
+						JSONArray children = new JSONArray();
+						data.put("children", children);
+						return new ModeratorListing(obj);
+					}
+					throw ex;
+				}
 			}
 			
 		}.run();
