@@ -166,38 +166,56 @@ public class MysqlBanHistoryMapping extends MysqlObjectWithIDMapping<BanHistory>
 
 	@Override
 	public BanHistory fetchByActionAndSubreddit(int uslActionId, int subredditId) {
+		BanHistory res = null;
 		try(PreparedStatement statement = connection.prepareStatement(
 				"SELECT ban_histories.id, ban_histories.mod_person_id, ban_histories.banned_person_id, ban_histories.handled_modaction_id, "
 				+ "ban_histories.ban_description, ban_histories.ban_details FROM "
 				+ "usl_action_ban_history "
 				+ "INNER JOIN ban_histories ON usl_action_ban_history.usl_action_id = ? AND usl_action_ban_history.ban_history_id = ban_histories.id "
 				+ "INNER JOIN handled_modactions ON ban_histories.handled_modaction_id = handled_modactions.id AND "
-				+ "handled_modactions.monitored_subreddit_id = ?")) {
+				+ "handled_modactions.monitored_subreddit_id = ? ORDER BY ban_history_id ASC")) {
 			statement.setInt(1, uslActionId);
 			statement.setInt(2, subredditId);
 			try (ResultSet set = statement.executeQuery()) {
 				if(!set.next())
 					return null;
 				
-				BanHistory res = new BanHistory(set.getInt(1), set.getInt(2), set.getInt(3), set.getInt(4), set.getString(5), set.getString(6));
+				res = new BanHistory(set.getInt(1), set.getInt(2), set.getInt(3), set.getInt(4), set.getString(5), set.getString(6));
+				if(res.banDescription == null)
+					res.banDescription = "";
+				
 				if(set.next()) {
 					String query = "SELECT ban_histories.id, ban_histories.mod_person_id, ban_histories.banned_person_id, ban_histories.handled_modaction_id, "
 							+ "ban_histories.ban_description, ban_histories.ban_details FROM "
 							+ "usl_action_ban_history "
 							+ "INNER JOIN ban_histories ON usl_action_ban_history.usl_action_id = " + uslActionId + " AND usl_action_ban_history.ban_history_id = ban_histories.id "
 							+ "INNER JOIN handled_modactions ON ban_histories.handled_modaction_id = handled_modactions.id AND "
-							+ "handled_modactions.monitored_subreddit_id = " + subredditId;
-					throw new RuntimeException("shouldnt have more! Full query: " + query);
+							+ "handled_modactions.monitored_subreddit_id = " + subredditId + " ORDER BY ban_history_id ASC";
+					logger.warn("shouldnt have more! Full query: %s", query);
+					
+					// I don't know why this happens but it's always the younger result which is wrong
+				} else {
+					return res;
 				}
-				if(res.banDescription == null)
-					res.banDescription = "";
-				
-				return res;
 			}
 		}catch(SQLException e) {
 			logger.throwing(e);
 			throw new RuntimeException(e);
 		}
+
+		
+		// If we got here we need to delete that row and try again
+		try(PreparedStatement statement = connection.prepareStatement(
+				"DELETE FROM usl_action_ban_history WHERE usl_action_id = ? AND ban_history_id = ?")) {
+			statement.setInt(1, uslActionId);
+			statement.setInt(2, res.id);
+			statement.execute();
+		}catch(SQLException e) {
+			logger.throwing(e);
+			throw new RuntimeException(e);
+		}
+		
+		return fetchByActionAndSubreddit(uslActionId, subredditId);
 	}
 	
 	@Override
