@@ -216,6 +216,8 @@ public class USLPropagator {
 		Person pers = database.getPersonMapping().fetchByID(action.personID);
 		if(pers.username.equals("[deleted]"))
 			return result; // not a real user
+		if(pers.username.equalsIgnoreCase("automoderator"))
+			return result; // automoderator is protected to avoid abuse
 
 		
 		TraditionalScammer tradScammer = database.getTraditionalScammerMapping().fetchByPersonID(action.personID);
