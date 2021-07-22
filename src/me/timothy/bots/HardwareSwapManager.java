@@ -113,7 +113,7 @@ public class HardwareSwapManager extends BotDriver {
 			@Override
 			protected String runImpl() throws Exception {
 				Listing revisions = RedditUtils.getWikiRevisions("hardwareswap", "banlist", 1, bot.getUser());
-				return revisions.getChild(1).getString("id");
+				return revisions.getChild(0).getString("id");
 			}
 		}.run();
 	}
@@ -135,10 +135,10 @@ public class HardwareSwapManager extends BotDriver {
 		USLDatabase db = (USLDatabase)database;
 		
 		final String lastKnownRevisionID = getLastKnownRevisionID();
+		final String currentRevisionID = getLatestRevisionID();
 		if(lastKnownRevisionID != null) {
-			String mostRecentRevisionID = getLatestRevisionID();
 			sleepFor(BRIEF_PAUSE_MS);
-			if(mostRecentRevisionID.equals(lastKnownRevisionID))
+			if(currentRevisionID.equals(lastKnownRevisionID))
 				return;
 			logger.trace("Determined hardwareswap updated banlist");
 			db.getActionLogMapping().append("Determined hardwareswap updated banlist");
@@ -202,6 +202,8 @@ public class HardwareSwapManager extends BotDriver {
 			db.getActionLogMapping().append("Detected hardwareswap unbanned /u/" + pers.username + " (old reason: " +  unban.note + ")");
 			db.getHardwareSwapBanMapping().deleteByID(unban.id);
 		}
+		
+		setLastKnownRevisionID(currentRevisionID);
 	}
 	
 	protected void propagate() {
