@@ -72,6 +72,8 @@ public class USLBotDriver extends BotDriver {
 	protected HardwareSwapManager hwsManager;
 	/** The id of the bot user, without the t2_ prefix */
 	protected String botUserId;
+	/** If we are going to dump the database in RegexrTech mode the next loop */
+	protected boolean dumpRegexrTech;
 	
 	static {
 		BotDriver.BRIEF_PAUSE_MS = 2000;
@@ -116,10 +118,19 @@ public class USLBotDriver extends BotDriver {
 		repropManager = new USLRepropagationRequestManager(database, config, backupManager, 
 				(info) -> handleModmailPMs(Collections.singletonList(info)), (pmInfo) -> handleUserPMs(Collections.singletonList(pmInfo)));
 		hwsManager = new HardwareSwapManager(database, config, new Bot("hardwareswap"), deletedPersonManager);
+		dumpRegexrTech = false;
 		
 		unbanRequestHandler.verifyHaveResponses();
 		propagator.verifyHaveResponses();
 		repropManager.verifyHaveResponses();
+	}
+
+	/**
+	 * Configures if this should dump the database in RegexrTech format on the next loop
+	 * @param shouldDump True to dump every loop, false not to
+	 */
+	public void dumpRegexrTech(boolean shouldDump) {
+		dumpRegexrTech = shouldDump;
 	}
 
 	@Override
@@ -146,6 +157,13 @@ public class USLBotDriver extends BotDriver {
 		logger.trace("Updating tracked subreddits..");
 		updateTrackedSubreddits();
 		
+		if (dumpRegexrTech) {
+			al.append("Dumping database in RegexrTech mode..");
+			logger.trace("Dumping database in RegexrTech mode..");
+			new RegExrTechDump((USLDatabase) database, monitoredSubreddits, (USLFileConfiguration) config).dump();
+			dumpRegexrTech = false;
+		}
+
 		al.append("Sending out reset password messages..");
 		logger.trace("Sending out reset password messages..");
 		sendResetPasswordMessages();

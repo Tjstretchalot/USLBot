@@ -59,18 +59,28 @@ public class USLBotMain {
 		logger.debug("Verifying database schema..");
 		database.validateTableState();
 		
+		boolean dumpRegexrTech = false;
+		if (args.length > 0 && args[0].equals("--dump-regexrtech")) {
+			logger.debug("Dumping in RegExrTech format..");
+			dumpRegexrTech = true;
+		}
+
 		logger.debug("Initializing bot information..");
 		Bot uslBot = new Bot(database.getMonitoredSubredditMapping().fetchAllAndConcatenate());
-		
+
 		logger.debug("Running USLBotDriver..");
-		BotDriver driver = new USLBotDriver(database, config, uslBot,
+		USLBotDriver driver = new USLBotDriver(database, config, uslBot,
 				new CommentSummon[] { }, 
 				new PMSummon[] { 
 						new UnbanRequestPMSummon(),
 						new CheckPMSummon()
 				},
 				new LinkSummon[] { });
-		
+
+		if (dumpRegexrTech) {
+			driver.dumpRegexrTech(true);
+		}
+
 		while(true) {
 			try {
 				driver.run();
