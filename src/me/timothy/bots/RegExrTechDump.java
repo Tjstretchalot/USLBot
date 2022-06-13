@@ -10,11 +10,14 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import me.timothy.bots.models.MonitoredSubreddit;
+import me.timothy.bots.models.Person;
 
 /**
  * Dumps the database in the format expected by the RegExrTech version of the
@@ -40,13 +43,11 @@ import me.timothy.bots.models.MonitoredSubreddit;
 public class RegExrTechDump {
 	private final Logger logger;
 	private final USLDatabase database;
-	private final List<MonitoredSubreddit> subreddits;
 	private final USLFileConfiguration config;
 
 	public RegExrTechDump(USLDatabase database, List<MonitoredSubreddit> subreddits, USLFileConfiguration config) {
 		this.logger = LogManager.getLogger();
 		this.database = database;
-		this.subreddits = subreddits;
 		this.config = config;
 	}
 
@@ -90,7 +91,7 @@ public class RegExrTechDump {
 	 * @throws IOException If one occurs while writing
 	 */
 	private void dumpBans(OutputStream os) throws IOException, SQLException {
-		int botPersonID = database.getPersonMapping().fetchByUsername(config.getProperty("user.username")).id;
+		Person botPerson = database.getPersonMapping().fetchByUsername(config.getProperty("user.username"));
 		Connection connection = database.getConnection();
 
 		PrintWriter writer = new PrintWriter(os);
@@ -107,11 +108,13 @@ public class RegExrTechDump {
 							+ "JOIN persons AS mod_persons ON mod_persons.id = ban_histories.mod_person_id "
 							+ "JOIN handled_modactions ON handled_modactions.id = ban_histories.handled_modaction_id "
 							+ "JOIN monitored_subreddits ON monitored_subreddits.id = handled_modactions.monitored_subreddit_id "
-							+ "WHERE" + "  ban_histories.mod_person_id != ?"
+							+ "WHERE"
+							+ "  ban_histories.mod_person_id != ?"
 							+ "  AND ban_histories.ban_description LIKE CONCAT('%', hashtags.tag, '%')"
 							+ "  AND handled_modactions.occurred_at = usl_actions.created_at "
-							+ "ORDER BY persons.username ASC, hashtags.tag ASC ");
-			statement.setInt(1, botPersonID);
+							+ "ORDER BY persons.username ASC, hashtags.tag ASC "
+							);
+			statement.setInt(1, botPerson.id);
 			ResultSet results = statement.executeQuery();
 
 			String currentPersonUsername = null;
@@ -134,7 +137,7 @@ public class RegExrTechDump {
 					writer.append(",");
 				}
 
-				writer.append(quote(tag));
+				writer.append(quote(tag.substring(1)));
 				writer.append(":{\"banned_by\":");
 				writer.append(quote(modPersonUsername));
 				writer.append(",\"issued_on\":");
@@ -145,6 +148,167 @@ public class RegExrTechDump {
 				writer.append(quote(banDescription));
 				writer.append('}');
 			}
+
+			results.close();
+			statement.close();
+
+			statement = connection.prepareStatement(
+					"SELECT persons.username, traditional_scammers.description, traditional_scammers.created_at "
+					+ "FROM traditional_scammers "
+					+ "JOIN persons ON persons.id = traditional_scammers.person_id "
+					+ "ORDER BY persons.username ASC"
+			);
+			results = statement.executeQuery();
+
+			Pattern tagPattern = Pattern.compile("#\\w+");
+			Pattern subredditPattern = Pattern.compile("/r/\\w+");
+			while (results.next()) {
+				String bannedPersonUsername = results.getString(1);
+				String description = results.getString(2);
+				Timestamp bannedAt = results.getTimestamp(3);
+
+				if (currentPersonUsername != null) {
+					writer.append("},");
+					currentPersonUsername = bannedPersonUsername;
+				}
+
+				writer.append(quote(bannedPersonUsername));
+				writer.append(":{");
+
+				String subreddit = "universalscammerlist";
+				Matcher subredditMatcher = subredditPattern.matcher(description);
+				if (subredditMatcher.find()) {
+					subreddit = subredditMatcher.group().substring(3);
+				}
+
+				Matcher tagMatcher = tagPattern.matcher(description);
+				String tag = "#scammer";
+				if (tagMatcher.find()) {
+					tag = tagMatcher.group();
+				}
+				boolean first = true;
+				while(true) {
+					if (!first) {
+						writer.append(",");
+					}
+					first = false;
+
+					writer.append(quote(tag.substring(1)));
+					writer.append(":{\"banned_by\":\"uslbot\",\"issued_on\":");
+					writer.append(Long.toString(bannedAt.getTime() / 1000));
+					writer.append(",\"banned_on\":");
+					writer.append(quote(subreddit));
+					writer.append(",\"description\":");
+					writer.append(quote("grandfathered; " + description));
+					writer.append('}');
+
+					if (!tagMatcher.find())
+						break;
+
+					tag = tagMatcher.group();
+				}
+			}
+
+			results.close();
+			statement.close();
+
+			statement = connection.prepareStatement(
+					"SELECT"
+					+ "    outer_persons.username,"
+					+ "    outer_ban_histories.ban_description,"
+					+ "    outer_usl_actions.created_at "
+					+ "FROM persons AS outer_persons "
+					+ "JOIN usl_actions AS outer_usl_actions ON outer_usl_actions.person_id = outer_persons.id "
+					+ "JOIN usl_action_ban_history AS outer_usl_action_ban_history ON outer_usl_action_ban_history.usl_action_id = outer_usl_actions.id "
+					+ "JOIN ban_histories AS outer_ban_histories ON outer_usl_action_ban_history.ban_history_id = outer_ban_histories.id "
+					+ "JOIN handled_modactions AS outer_handled_modactions ON outer_handled_modactions.id = outer_ban_histories.handled_modaction_id "
+					+ "WHERE"
+					+ "    NOT EXISTS ("
+					+ "        SELECT 1 FROM usl_actions"
+					+ "        JOIN usl_action_hashtags ON usl_action_hashtags.usl_action_id = usl_actions.id"
+					+ "        JOIN hashtags ON hashtags.id = usl_action_hashtags.hashtag_id"
+					+ "        JOIN persons ON persons.id = usl_actions.person_id"
+					+ "        JOIN usl_action_ban_history ON usl_action_ban_history.usl_action_id = usl_actions.id"
+					+ "        JOIN ban_histories ON ban_histories.id = usl_action_ban_history.ban_history_id"
+					+ "        JOIN persons AS mod_persons ON mod_persons.id = ban_histories.mod_person_id"
+					+ "        JOIN handled_modactions ON handled_modactions.id = ban_histories.handled_modaction_id"
+					+ "        JOIN monitored_subreddits ON monitored_subreddits.id = handled_modactions.monitored_subreddit_id"
+					+ "        WHERE"
+					+ "          ban_histories.mod_person_id != ?"
+					+ "          AND persons.id = outer_persons.id"
+					+ "          AND ban_histories.ban_description LIKE CONCAT('%', hashtags.tag, '%')"
+					+ "          AND handled_modactions.occurred_at = usl_actions.created_at"
+					+ "          AND usl_actions.is_ban = 1"
+					+ "          AND usl_actions.is_latest = 1"
+					+ "    )"
+					+ "    AND NOT EXISTS ("
+					+ "        SELECT 1 FROM usl_action_ban_history"
+					+ "        JOIN ban_histories ON ban_histories.id = usl_action_ban_history.ban_history_id"
+					+ "        JOIN handled_modactions ON handled_modactions.id = ban_histories.handled_modaction_id"
+					+ "        WHERE usl_action_ban_history.usl_action_id = outer_usl_actions.id"
+					+ "          AND ban_histories.ban_details = 'permanent'"
+					+ "          AND handled_modactions.occurred_at < outer_handled_modactions.occurred_at"
+					+ "    )"
+					+ "    AND NOT EXISTS ("
+					+ "        SELECT 1 FROM traditional_scammers"
+					+ "        WHERE traditional_scammers.person_id = outer_persons.id"
+					+ "    )"
+					+ "    AND outer_usl_actions.is_ban = 1"
+					+ "    AND outer_usl_actions.is_latest = 1"
+					+ "    AND outer_ban_histories.ban_details = 'permanent'"
+			);
+			statement.setInt(1, botPerson.id);
+			results = statement.executeQuery();
+
+			while (results.next()) {
+				String bannedPersonUsername = results.getString(1);
+				String description = results.getString(2);
+				Timestamp bannedAt = results.getTimestamp(3);
+
+				if (currentPersonUsername != null) {
+					writer.append("},");
+					currentPersonUsername = bannedPersonUsername;
+				}
+
+				writer.append(quote(bannedPersonUsername));
+				writer.append(":{");
+
+				String subreddit = "universalscammerlist";
+				Matcher subredditMatcher = subredditPattern.matcher(description);
+				if (subredditMatcher.find()) {
+					subreddit = subredditMatcher.group().substring(3);
+				}
+
+				Matcher tagMatcher = tagPattern.matcher(description);
+				String tag = "#scammer";
+				if (tagMatcher.find()) {
+					tag = tagMatcher.group();
+				}
+				boolean first = true;
+				while(true) {
+					if (!first) {
+						writer.append(",");
+					}
+					first = false;
+
+					writer.append(quote(tag.substring(1)));
+					writer.append(":{\"banned_by\":\"uslbot\",\"issued_on\":");
+					writer.append(Long.toString(bannedAt.getTime() / 1000));
+					writer.append(",\"banned_on\":");
+					writer.append(quote(subreddit));
+					writer.append(",\"description\":");
+					writer.append(quote("history lost; " + description));
+					writer.append('}');
+
+					if (!tagMatcher.find())
+						break;
+
+					tag = tagMatcher.group();
+				}
+			}
+
+			statement.close();
+			results.close();
 
 			if (currentPersonUsername != null) {
 				writer.append('}');
