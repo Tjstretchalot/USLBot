@@ -176,12 +176,14 @@ public class RegExrTechDump {
 				writer.append(":{");
 
 				String subreddit = "universalscammerlist";
-				Matcher subredditMatcher = subredditPattern.matcher(description);
-				if (subredditMatcher.find()) {
-					subreddit = subredditMatcher.group().substring(3);
+				if (description != null) {
+					Matcher subredditMatcher = subredditPattern.matcher(description);
+					if (subredditMatcher.find()) {
+						subreddit = subredditMatcher.group().substring(3);
+					}
 				}
 
-				Matcher tagMatcher = tagPattern.matcher(description);
+				Matcher tagMatcher = tagPattern.matcher(description == null ? "" : description);
 				String tag = "#scammer";
 				if (tagMatcher.find()) {
 					tag = tagMatcher.group();
@@ -247,7 +249,13 @@ public class RegExrTechDump {
 					+ "        JOIN handled_modactions ON handled_modactions.id = ban_histories.handled_modaction_id"
 					+ "        WHERE usl_action_ban_history.usl_action_id = outer_usl_actions.id"
 					+ "          AND ban_histories.ban_details = 'permanent'"
-					+ "          AND handled_modactions.occurred_at < outer_handled_modactions.occurred_at"
+					+ "          AND ("
+					+ "            ("
+					+ "              handled_modactions.occurred_at < outer_handled_modactions.occurred_at"
+					+ "              AND (outer_ban_histories.ban_description IS NULL OR ban_histories.ban_description IS NOT NULL)"
+					+ "            )"
+					+ "            OR (outer_ban_histories.ban_description IS NULL AND ban_histories.ban_description IS NOT NULL)"
+					+ "          )"
 					+ "    )"
 					+ "    AND NOT EXISTS ("
 					+ "        SELECT 1 FROM traditional_scammers"
@@ -274,12 +282,14 @@ public class RegExrTechDump {
 				writer.append(":{");
 
 				String subreddit = "universalscammerlist";
-				Matcher subredditMatcher = subredditPattern.matcher(description);
-				if (subredditMatcher.find()) {
-					subreddit = subredditMatcher.group().substring(3);
+				if (description != null) {
+					Matcher subredditMatcher = subredditPattern.matcher(description);
+					if (subredditMatcher.find()) {
+						subreddit = subredditMatcher.group().substring(3);
+					}
 				}
 
-				Matcher tagMatcher = tagPattern.matcher(description);
+				Matcher tagMatcher = tagPattern.matcher(description == null ? "" : null);
 				String tag = "#scammer";
 				if (tagMatcher.find()) {
 					tag = tagMatcher.group();
