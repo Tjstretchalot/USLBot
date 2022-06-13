@@ -289,7 +289,7 @@ public class RegExrTechDump {
 					}
 				}
 
-				Matcher tagMatcher = tagPattern.matcher(description == null ? "" : null);
+				Matcher tagMatcher = tagPattern.matcher(description == null ? "" : description);
 				String tag = "#scammer";
 				if (tagMatcher.find()) {
 					tag = tagMatcher.group();
