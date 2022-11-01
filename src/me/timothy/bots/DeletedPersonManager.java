@@ -7,6 +7,7 @@ import java.util.Map.Entry;
 
 import me.timothy.bots.database.MappingDatabase;
 import me.timothy.bots.models.Person;
+import me.timothy.jreddit.HttpUnexpectedStatusCodeException;
 import me.timothy.jreddit.RedditUtils;
 import me.timothy.jreddit.info.Account;
 
@@ -116,7 +117,14 @@ public class DeletedPersonManager {
 
 			@Override
 			protected Boolean runImpl() throws Exception {
-				result[0] = RedditUtils.getAccountFor(driver.bot.getUser(), user);
+				try {
+					result[0] = RedditUtils.getAccountFor(driver.bot.getUser(), user);
+				} catch (HttpUnexpectedStatusCodeException e) {
+					if (e.statusCode == 404) {
+						return false;
+					}
+					throw e;
+				}
 				return true;
 			}
 
